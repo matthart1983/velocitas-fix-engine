@@ -1,1 +1,3 @@
 /target
+bench-vs-quickfixj/.gradle/
+bench-vs-quickfixj/build/

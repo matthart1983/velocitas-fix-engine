@@ -4,7 +4,7 @@
     <strong>Ultra-low-latency FIX protocol engine for institutional trading</strong>
   </p>
   <p align="center">
-    <a href="#performance">2.2M msg/s</a> · <a href="#performance">28 ns serialize</a> · <a href="#performance">Zero allocations</a> · <a href="#architecture">Lock-free</a>
+    <a href="#performance">2.25M msg/s</a> · <a href="#performance">28 ns serialize</a> · <a href="#performance">Zero allocations</a> · <a href="#architecture">Lock-free</a>
   </p>
 </p>
 
@@ -14,14 +14,14 @@
   <img src="demo.gif" alt="Velocitas FIX Engine Demo" width="800">
 </p>
 
-Velocitas is a **deterministic, zero-allocation FIX protocol engine** written in Rust, designed for the electronic trading infrastructure of tier-1 investment banks. It targets sub-microsecond message parsing, single-digit microsecond wire-to-wire latency, and sustained throughput exceeding 2 million messages per second per core — outperforming commercial offerings such as OnixS, Chronicle FIX, and LSEG RASH.
+Velocitas is a **deterministic, zero-allocation FIX protocol engine** written in Rust, designed for the electronic trading infrastructure of tier-1 investment banks. It achieves sub-microsecond message parsing, single-digit microsecond wire-to-wire latency, and sustained throughput exceeding 2 million messages per second per core on Apple Silicon — benchmarked at **29× faster serialization** and **1.5–2.2× faster parsing** than QuickFIX/J.
 
 ## Highlights
 
-- 🏎️ **28 ns** heartbeat serialization, **58 ns** NewOrderSingle serialization
-- 📈 **2.2M+ msg/s** sustained parse throughput (single core)
+- 🏎️ **28 ns** heartbeat serialization, **59 ns** NewOrderSingle serialization
+- 📈 **2.25M msg/s** sustained parse throughput (single core, Apple Silicon)
 - 🧠 **Zero-copy parser** — flyweight pattern, no heap allocations on hot path
-- 🔒 **Lock-free** memory pool with 8 ns alloc/dealloc cycles
+- 🔒 **Lock-free** memory pool with 8.5 ns alloc/dealloc cycles
 - 💾 **Memory-mapped journal** with CRC32 integrity and crash recovery
 - 📐 **238 tests** — unit, integration, conformance, property-based (fuzz)
 - 📊 **4 Criterion benchmark suites** with competitive comparison framework
@@ -39,20 +39,37 @@ Velocitas is a **deterministic, zero-allocation FIX protocol engine** written in
 
 ## Performance
 
-Benchmarked on Apple Silicon (M-series). Production targets assume Intel Xeon with DPDK kernel bypass.
+All numbers measured on Apple Silicon (M-series) using Criterion.rs. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology.
 
-| Benchmark | Result | Target | vs Commercial Best |
+### Criterion Benchmarks
+
+| Benchmark | Result |
+|---|---|
+| Serialize Heartbeat | **28 ns** |
+| Serialize Logon | **33 ns** |
+| Serialize NewOrderSingle | **59 ns** |
+| Serialize ExecutionReport | **37 ns** |
+| Parse Heartbeat (validated) | **1.15 µs** |
+| Parse NOS (validated) | **1.20 µs** |
+| Parse ExecRpt (validated) | **1.25 µs** |
+| Parse throughput (unchecked) | **2.25M msg/s** |
+| Parse throughput (validated) | **2.15M msg/s** |
+| Parse + Respond (NOS → ExecRpt) | **1.56M msg/s** |
+| Pool alloc/dealloc | **8.5 ns** |
+| Build + Parse Logon roundtrip | **74 ns** |
+| Sequential 10k validations | **143 µs** |
+| Logon handshake | **97 ns** |
+
+### vs QuickFIX/J (same methodology, 1M iterations each)
+
+| Benchmark | Velocitas | QuickFIX/J | Speedup |
 |---|---|---|---|
-| Serialize Heartbeat | **28 ns** | ≤ 50 ns ✅ | ~5× faster |
-| Serialize NewOrderSingle | **58 ns** | ≤ 250 ns ✅ | ~12× faster |
-| Serialize ExecutionReport | **76 ns** | ≤ 400 ns ✅ | ~16× faster |
-| Parse throughput (unchecked) | **2.2M msg/s** | ≥ 2M msg/s ✅ | ~3× faster |
-| Parse + Respond (NOS → ExecRpt) | **1.6M msg/s** | — | ~2× faster |
-| Pool alloc/dealloc | **8 ns** | — | N/A |
-| Build + Parse Logon roundtrip | **74 ns** | — | ~4× faster |
-| Sequence validation (10k) | **145 µs** | — | N/A |
+| Serialize NOS | **32 ns** | 917 ns | **29× faster** |
+| Parse NOS | **532 ns** | 796 ns | **1.5× faster** |
+| Parse ExecRpt | **583 ns** | 1,270 ns | **2.2× faster** |
+| Throughput | **1.83M msg/s** | 1.21M msg/s | **1.5× faster** |
 
-> **Industry comparison targets:** QuickFIX/J, QuickFIX/n, OnixS FIX Engine, Chronicle FIX, LSEG (Refinitiv) RASH. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology.
+> QuickFIX/J comparison run via `bench-vs-quickfixj/` and `src/bin/bench_compare.rs`. See [BENCHMARKS.md](BENCHMARKS.md) for methodology.
 
 ## Architecture
 
@@ -102,8 +119,12 @@ velocitas-fix-engine/
 ├── BENCHMARKS.md             # 10 benchmark definitions with methodology
 ├── Cargo.toml                # Rust project config with feature flags
 │
+├── bench-vs-quickfixj/       # QuickFIX/J comparison benchmark (Gradle project)
+│
 ├── src/
 │   ├── lib.rs                # Crate root — public API exports
+│   ├── bin/
+│   │   └── bench_compare.rs  # Rust-side benchmark for QuickFIX/J comparison
 │   ├── parser.rs             # Zero-copy FIX message parser
 │   ├── serializer.rs         # Zero-alloc message builder/serializer
 │   ├── message.rs            # MessageView flyweight + MsgType/Side/OrdType enums
@@ -160,7 +181,7 @@ cargo build --release --features dpdk
 ### Run Tests
 
 ```bash
-# Run all 82 tests
+# Run all 238 tests
 cargo test
 
 # Run with output (see throughput numbers)
@@ -190,6 +211,17 @@ cargo bench -- "BM-04_sustained"
 ```
 
 Benchmark reports are generated in `target/criterion/` with interactive HTML charts.
+
+#### QuickFIX/J Comparison
+
+```bash
+# Run the Rust side (Velocitas)
+cargo run --release --bin bench_compare
+
+# Run the Java side (QuickFIX/J) — requires Gradle + JDK 17+
+cd bench-vs-quickfixj
+gradle run
+```
 
 ## Usage
 
@@ -488,7 +520,7 @@ cargo test --release
 | BM-09 | Coordinated Omission | Verify benchmark accuracy (no CO bias) |
 | BM-10 | Jitter Analysis | Latency distribution characterization |
 
-See [BENCHMARKS.md](BENCHMARKS.md) for full methodology, target results, and comparison framework.
+See [BENCHMARKS.md](BENCHMARKS.md) for full methodology and results.
 
 ## Feature Flags
 
@@ -542,7 +574,7 @@ sysctl net.core.busy_poll=50
 ## Documentation
 
 - **[SPECIFICATION.md](SPECIFICATION.md)** — Complete 15-section technical specification covering architecture, threading, memory layout, session FSM, security, configuration, and compliance
-- **[BENCHMARKS.md](BENCHMARKS.md)** — Formal benchmark definitions, methodology, target results, competitive comparison framework, and CI pipeline integration
+- **[BENCHMARKS.md](BENCHMARKS.md)** — Benchmark definitions, methodology, measured results, and QuickFIX/J comparison
 
 ## Roadmap
 

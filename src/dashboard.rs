@@ -185,6 +185,11 @@ impl Dashboard {
         self.health = health;
     }
 
+    /// Return a clone of the current health status.
+    pub fn health(&self) -> HealthStatus {
+        self.health.clone()
+    }
+
     /// Return the current number of tracked sessions.
     pub fn session_count(&self) -> usize {
         self.sessions.len()
