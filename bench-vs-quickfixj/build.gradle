@@ -24,3 +24,9 @@ java {
 tasks.named('run') {
     jvmArgs = ['-server', '-XX:+UseG1GC', '-Xms512m', '-Xmx512m']
 }
+
+tasks.register('runTcp', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'TcpBenchmark'
+    jvmArgs = ['-server', '-XX:+UseG1GC', '-Xms512m', '-Xmx512m']
+}

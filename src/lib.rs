@@ -4,6 +4,7 @@ pub mod serializer;
 pub mod session;
 pub mod transport;
 pub mod transport_dpdk;
+pub mod transport_tcp;
 pub mod journal;
 pub mod pool;
 pub mod checksum;
@@ -18,6 +19,9 @@ pub mod dashboard;
 pub mod fixt;
 pub mod cluster;
 pub mod acceptor;
+pub mod engine;
+pub mod server;
+pub mod client;
 
 pub use message::{FieldEntry, MessageView, Side, OrdType, MsgType};
 pub use parser::FixParser;

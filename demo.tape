@@ -12,3 +12,8 @@ Set PlaybackSpeed 1
 Type "cargo run --release --bin demo"
 Enter
 Sleep 45s
+
+Sleep 2s
+Type "cargo run --release --bin session_demo"
+Enter
+Sleep 8s

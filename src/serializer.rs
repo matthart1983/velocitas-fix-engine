@@ -291,6 +291,44 @@ pub fn build_logon(
     ser.finalize()
 }
 
+/// Convenience function to build a Logout message.
+pub fn build_logout(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"5")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time);
+    ser.finalize()
+}
+
+/// Convenience function to build a TestRequest message.
+pub fn build_test_request(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    test_req_id: &[u8],
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"1")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_str(tags::TEST_REQ_ID, test_req_id);
+    ser.finalize()
+}
+
 /// Convenience function to build a NewOrderSingle message.
 pub fn build_new_order_single(
     buf: &mut [u8],

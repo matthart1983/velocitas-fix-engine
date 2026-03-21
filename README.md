@@ -4,7 +4,7 @@
     <strong>Ultra-low-latency FIX protocol engine for institutional trading</strong>
   </p>
   <p align="center">
-    <a href="#performance">2.25M msg/s</a> · <a href="#performance">28 ns serialize</a> · <a href="#performance">Zero allocations</a> · <a href="#architecture">Lock-free</a>
+    <a href="#performance">111K msg/s TCP</a> · <a href="#performance">28 ns serialize</a> · <a href="#performance">Zero allocations</a> · <a href="#architecture">Lock-free</a>
   </p>
 </p>
 
@@ -36,6 +36,9 @@ Velocitas is a **deterministic, zero-allocation FIX protocol engine** written in
 - ⏱️ **Hardware timestamps** — TSC/rdtsc/CNTVCT with MiFID II nanosecond formatting
 - 🔌 **Session acceptor** — connection pooling, CompID whitelisting, idle eviction
 - 📖 **XML dictionary compiler** — QuickFIX XML → O(1) runtime lookup tables
+- 🔌 **TCP networking** — real initiator and acceptor with full Logon/Logout lifecycle
+- 🖥️ **`FixServer`** — high-level acceptor with auto-accept, CompID whitelisting, thread-per-connection
+- 📡 **`FixClient`** — high-level initiator with single-call `connect_and_run()`
 
 ## Performance
 
@@ -70,6 +73,16 @@ All numbers measured on Apple Silicon (M-series) using Criterion.rs. See [BENCHM
 | Throughput | **1.83M msg/s** | 1.21M msg/s | **1.5× faster** |
 
 > QuickFIX/J comparison run via `bench-vs-quickfixj/` and `src/bin/bench_compare.rs`. See [BENCHMARKS.md](BENCHMARKS.md) for methodology.
+
+### TCP Round-Trip (NOS → ExecRpt over localhost)
+
+| Metric | Velocitas | QuickFIX/J | Speedup |
+|---|---|---|---|
+| p50 latency | **15.6 µs** | 61.1 µs | **3.9×** |
+| p99 latency | **52.9 µs** | 342.7 µs | **6.5×** |
+| p99.9 latency | **86.5 µs** | 653.4 µs | **7.5×** |
+| max latency | **125.1 µs** | 3,939.8 µs | **31.5×** |
+| Throughput | **111,686 msg/s** | 24,948 msg/s | **4.5×** |
 
 ## Architecture
 
@@ -124,7 +137,12 @@ velocitas-fix-engine/
 ├── src/
 │   ├── lib.rs                # Crate root — public API exports
 │   ├── bin/
-│   │   └── bench_compare.rs  # Rust-side benchmark for QuickFIX/J comparison
+│   │   ├── demo.rs           # Full engine capability demo
+│   │   ├── bench_compare.rs  # Rust-side benchmark for QuickFIX/J comparison
+│   │   ├── bench_tcp.rs      # TCP round-trip benchmark
+│   │   ├── tcp_demo.rs       # TCP session demo
+│   │   ├── session_demo.rs   # Multi-client session demo
+│   │   └── dashboard.rs      # Web dashboard binary
 │   ├── parser.rs             # Zero-copy FIX message parser
 │   ├── serializer.rs         # Zero-alloc message builder/serializer
 │   ├── message.rs            # MessageView flyweight + MsgType/Side/OrdType enums
@@ -144,7 +162,11 @@ velocitas-fix-engine/
 │   ├── cluster.rs            # Aeron-style cluster consensus for active-active HA
 │   ├── acceptor.rs           # FIX session acceptor with connection pooling
 │   ├── timestamp.rs          # Hardware timestamps (TSC/rdtsc/CNTVCT, MiFID II formatting)
-│   └── dashboard.rs          # Web dashboard (HTTP endpoints, real-time monitoring)
+│   ├── dashboard.rs          # Web dashboard (HTTP endpoints, real-time monitoring)
+│   ├── engine.rs             # FIX protocol engine
+│   ├── transport_tcp.rs      # Real TCP transport
+│   ├── server.rs             # High-level FixServer
+│   └── client.rs             # High-level FixClient
 │
 ├── tests/
 │   ├── integration_tests.rs  # 18 end-to-end tests (roundtrip, stress, lifecycle)
@@ -176,6 +198,19 @@ cargo build --release --features tls
 
 # With DPDK kernel bypass (requires DPDK installed)
 cargo build --release --features dpdk
+```
+
+### Run Demo
+
+```bash
+# Full engine capability demo
+cargo run --release --bin demo
+
+# TCP session demo (server + two clients)
+cargo run --release --bin session_demo
+
+# Web dashboard
+cargo run --release --bin dashboard
 ```
 
 ### Run Tests
@@ -221,6 +256,17 @@ cargo run --release --bin bench_compare
 # Run the Java side (QuickFIX/J) — requires Gradle + JDK 17+
 cd bench-vs-quickfixj
 gradle run
+```
+
+#### TCP Round-Trip Benchmark
+
+```bash
+# Velocitas TCP benchmark (10k round-trips over localhost)
+cargo run --release --bin bench_tcp
+
+# QuickFIX/J TCP benchmark
+cd bench-vs-quickfixj
+gradle runTcp
 ```
 
 ## Usage
@@ -417,20 +463,38 @@ let msg = dict.lookup_message("D");            // → NewOrderSingle
 let errors = dict.validate_message("D", &tags); // check required fields
 ```
 
-### Session Acceptor
+### FIX Server (Acceptor)
 
 ```rust
-use velocitas_fix::acceptor::*;
+use velocitas_fix::server::*;
+use velocitas_fix::engine::*;
 
-let config = AcceptorConfig {
-    bind_address: "0.0.0.0".into(),
+let server = FixServer::new(FixServerConfig {
     port: 9878,
+    sender_comp_id: "EXCHANGE".into(),
     allowed_comp_ids: vec!["CLIENT_A".into(), "CLIENT_B".into()],
-    ..AcceptorConfig::default()
-};
-let mut acceptor = Acceptor::new(config);
-let conn_id = acceptor.accept_connection("10.0.1.50", "CLIENT_A", now_ms)?;
-let session = acceptor.get_session_mut(conn_id).unwrap();
+    ..Default::default()
+});
+
+// Blocks, spawns a thread per connection
+server.start(|| Box::new(MyApp)).unwrap();
+```
+
+### FIX Client (Initiator)
+
+```rust
+use velocitas_fix::client::*;
+
+let client = FixClient::new(FixClientConfig {
+    remote_host: "10.0.1.50".into(),
+    remote_port: 9878,
+    sender_comp_id: "BANK_OMS".into(),
+    target_comp_id: "EXCHANGE".into(),
+    ..Default::default()
+});
+
+// Blocks until Logout
+client.connect_and_run(&mut MyApp::new()).unwrap();
 ```
 
 ### Hardware Timestamps
