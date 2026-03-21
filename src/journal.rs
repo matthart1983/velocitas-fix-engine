@@ -3,7 +3,7 @@
 /// Uses memory-mapped files for high-performance persistence with zero-copy reads.
 /// Messages are stored in a circular buffer with CRC32 integrity checks.
 
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -38,7 +38,7 @@ pub enum SyncPolicy {
 
 /// Memory-mapped message journal.
 pub struct Journal {
-    path: PathBuf,
+    _path: PathBuf,
     mmap: MmapMut,
     write_offset: usize,
     capacity: usize,
@@ -60,7 +60,7 @@ impl Journal {
         let mmap = unsafe { MmapMut::map_mut(&file)? };
 
         Ok(Journal {
-            path: path.to_path_buf(),
+            _path: path.to_path_buf(),
             mmap,
             write_offset: 0,
             capacity: size_bytes,

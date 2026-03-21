@@ -79,14 +79,14 @@ pub trait Transport {
 /// Kernel TCP transport implementation using standard sockets.
 pub struct KernelTcpTransport {
     connected: bool,
-    config: TransportConfig,
+    _config: TransportConfig,
 }
 
 impl KernelTcpTransport {
     pub fn new(config: TransportConfig) -> Self {
         KernelTcpTransport {
             connected: false,
-            config,
+            _config: config,
         }
     }
 }

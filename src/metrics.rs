@@ -221,12 +221,6 @@ impl LatencyHistogram {
         self.histogram.lock().unwrap().len()
     }
 
-    /// Sum of all recorded values (approximation via HDR bins).
-    fn sum(&self) -> u64 {
-        let h = self.histogram.lock().unwrap();
-        h.iter_recorded().map(|v| v.value_iterated_to() * v.count_at_value()).sum()
-    }
-
     /// Reset all recorded data.
     pub fn reset(&self) {
         self.histogram.lock().unwrap().reset();

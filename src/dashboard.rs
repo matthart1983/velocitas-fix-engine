@@ -143,7 +143,7 @@ pub struct Dashboard {
     config: DashboardConfig,
     sessions: Vec<SessionStatus>,
     health: HealthStatus,
-    start_time_ms: u64,
+    _start_time_ms: u64,
 }
 
 impl Dashboard {
@@ -158,7 +158,7 @@ impl Dashboard {
             config,
             sessions: Vec::new(),
             health: HealthStatus::default(),
-            start_time_ms,
+            _start_time_ms: start_time_ms,
         }
     }
 

@@ -109,7 +109,7 @@ impl FixParser {
         // Parse all tag=value\x01 fields
         while pos < len {
             // Parse tag number
-            let tag_start = pos;
+            let _tag_start = pos;
             let mut tag: u32 = 0;
             while pos < len && buffer[pos] != EQUALS {
                 let b = buffer[pos];

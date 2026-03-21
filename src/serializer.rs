@@ -6,9 +6,6 @@
 use crate::checksum;
 use crate::tags::{self, EQUALS, SOH};
 
-/// Maximum serialized message size.
-const MAX_MSG_SIZE: usize = 65_536;
-
 /// Pre-computed lookup table for 2-digit numbers (00–99).
 /// Used for fast integer-to-ASCII conversion.
 static DIGIT_PAIRS: &[u8; 200] = b"\
