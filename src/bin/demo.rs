@@ -7,6 +7,7 @@
 /// ║  timestamps, journal, pool, and dashboard.                         ║
 /// ╚══════════════════════════════════════════════════════════════════════╝
 
+use std::thread;
 use std::time::{Duration, Instant};
 
 use velocitas_fix::acceptor::{Acceptor, AcceptorConfig};
@@ -63,6 +64,10 @@ fn separator() {
     println!("  {DIM}{line}{RESET}");
 }
 
+fn pause() {
+    thread::sleep(Duration::from_secs(2));
+}
+
 fn main() {
     println!();
     println!("{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}");
@@ -70,19 +75,33 @@ fn main() {
     println!("{BOLD}{CYAN}║          High-Performance FIX Protocol Engine Demo              ║{RESET}");
     println!("{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}");
 
+    pause();
     demo_parse_serialize();
+    pause();
     demo_session_lifecycle();
+    pause();
     demo_throughput_benchmark();
+    pause();
     demo_simd_scanning();
+    pause();
     demo_memory_pool();
+    pause();
     demo_journal();
+    pause();
     demo_fixt_session();
+    pause();
     demo_dictionary_compiler();
+    pause();
     demo_repeating_groups();
+    pause();
     demo_metrics();
+    pause();
     demo_cluster_ha();
+    pause();
     demo_acceptor();
+    pause();
     demo_timestamps();
+    pause();
     demo_dashboard();
 
     println!();
