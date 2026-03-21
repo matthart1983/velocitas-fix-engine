@@ -10,6 +10,10 @@
 
 ---
 
+<p align="center">
+  <img src="demo.gif" alt="Velocitas FIX Engine Demo" width="800">
+</p>
+
 Velocitas is a **deterministic, zero-allocation FIX protocol engine** written in Rust, designed for the electronic trading infrastructure of tier-1 investment banks. It targets sub-microsecond message parsing, single-digit microsecond wire-to-wire latency, and sustained throughput exceeding 2 million messages per second per core — outperforming commercial offerings such as OnixS, Chronicle FIX, and LSEG RASH.
 
 ## Highlights
