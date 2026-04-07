@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sbe:messageSchema xmlns:sbe="http://fixprotocol.io/2016/sbe"
+                   package="velocitas.fix.sbe"
+                   id="9001"
+                   version="1"
+                   semanticVersion="1.0.0"
+                   description="Velocitas FIX Aeron transport and internal business messages"
+                   byteOrder="littleEndian">
+    <types>
+        <type name="timestampNs" primitiveType="uint64" semanticType="UTCTimestamp"/>
+        <composite name="messageHeader" description="Message identifiers and length of message root">
+            <type name="blockLength" primitiveType="uint16"/>
+            <type name="templateId" primitiveType="uint16"/>
+            <type name="schemaId" primitiveType="uint16"/>
+            <type name="version" primitiveType="uint16"/>
+        </composite>
+        <composite name="varDataEncoding">
+            <type name="length" primitiveType="uint32" maxValue="1073741824"/>
+            <type name="varData" primitiveType="uint8" length="0"/>
+        </composite>
+        <composite name="varStringEncoding">
+            <type name="length" primitiveType="uint32" maxValue="1073741824"/>
+            <type name="varData" primitiveType="uint8" length="0" characterEncoding="UTF-8"/>
+        </composite>
+    </types>
+
+    <sbe:message name="FixAeronEnvelope" id="1" description="SBE envelope carrying a raw FIX payload over Aeron">
+        <field name="PublishedAt" id="1" type="timestampNs"/>
+        <field name="BaseStreamId" id="2" type="int32"/>
+        <data name="Payload" id="3" type="varDataEncoding"/>
+    </sbe:message>
+
+    <sbe:message name="NormalizedOrder" id="2" description="Normalized internal NewOrderSingle business message">
+        <field name="Side" id="1" type="uint8"/>
+        <field name="Qty" id="2" type="int64"/>
+        <data name="ClOrdId" id="3" type="varStringEncoding"/>
+        <data name="Symbol" id="4" type="varStringEncoding"/>
+        <data name="Price" id="5" type="varStringEncoding"/>
+        <data name="SenderCompId" id="6" type="varStringEncoding"/>
+        <data name="TargetCompId" id="7" type="varStringEncoding"/>
+    </sbe:message>
+
+    <sbe:message name="NormalizedExecutionReport" id="3" description="Normalized internal ExecutionReport business message">
+        <field name="Side" id="1" type="uint8"/>
+        <field name="OrderQty" id="2" type="int64"/>
+        <field name="LastQty" id="3" type="int64"/>
+        <field name="LeavesQty" id="4" type="int64"/>
+        <field name="CumQty" id="5" type="int64"/>
+        <field name="ExecType" id="6" type="uint8"/>
+        <field name="OrdStatus" id="7" type="uint8"/>
+        <data name="ClOrdId" id="8" type="varStringEncoding"/>
+        <data name="Symbol" id="9" type="varStringEncoding"/>
+        <data name="LastPx" id="10" type="varStringEncoding"/>
+        <data name="AvgPx" id="11" type="varStringEncoding"/>
+        <data name="OrderId" id="12" type="varStringEncoding"/>
+        <data name="ExecId" id="13" type="varStringEncoding"/>
+    </sbe:message>
+</sbe:messageSchema>

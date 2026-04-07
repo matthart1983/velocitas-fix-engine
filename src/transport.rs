@@ -30,6 +30,8 @@ pub struct TransportConfig {
     pub tcp_nodelay: bool,
     pub aeron_channel: Option<String>,
     pub aeron_stream_id: i32,
+    pub aeron_dir: Option<String>,
+    pub aeron_embedded_driver: bool,
 }
 
 /// Transport mode selection.
@@ -57,12 +59,27 @@ impl Default for TransportConfig {
             tcp_nodelay: true,
             aeron_channel: Some("aeron:ipc".to_string()),
             aeron_stream_id: 1001,
+            aeron_dir: Some(TransportConfig::default_aeron_dir()),
+            aeron_embedded_driver: false,
         }
     }
 }
 
 impl TransportConfig {
+    /// Shared Aeron directory used by the default independent media driver path.
+    pub fn default_aeron_dir() -> String {
+        std::env::temp_dir()
+            .join("velocitas-fix-aeron")
+            .display()
+            .to_string()
+    }
+
     /// Default internal integration path for colocated services.
+    ///
+    /// The provided stream id is the base request stream. The paired Aeron
+    /// transport uses the next stream id for traffic in the opposite direction.
+    /// This expects an independent media driver to already be running for the
+    /// configured Aeron directory.
     pub fn aeron_ipc(stream_id: i32) -> Self {
         TransportConfig {
             aeron_stream_id: stream_id,
@@ -212,6 +229,11 @@ mod tests {
         let config = TransportConfig::default();
         assert_eq!(config.mode, TransportMode::Aeron);
         assert_eq!(config.aeron_channel.as_deref(), Some("aeron:ipc"));
+        assert_eq!(
+            config.aeron_dir.as_deref(),
+            Some(TransportConfig::default_aeron_dir().as_str())
+        );
+        assert!(!config.aeron_embedded_driver);
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use std::io;
+use std::process::{Child, Command};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::mpsc;
 use std::thread;
@@ -16,11 +17,24 @@ static NEXT_STREAM_ID: AtomicI32 = AtomicI32::new(30_000);
 
 #[test]
 fn test_aeron_is_the_default_end_to_end_integration_path() {
-    let stream_id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed);
+    let stream_id = NEXT_STREAM_ID.fetch_add(2, Ordering::Relaxed);
+    let aeron_dir = std::env::temp_dir().join(format!("velocitas-fix-test-{stream_id}"));
+    let ready_file = std::env::temp_dir().join(format!("velocitas-fix-test-ready-{stream_id}"));
+    let _ = std::fs::remove_dir_all(&aeron_dir);
+    let _ = std::fs::remove_file(&ready_file);
+
+    let mut driver = spawn_media_driver(&aeron_dir, &ready_file);
+    wait_for_file(&ready_file, Duration::from_secs(5));
+
     let (tx, rx) = mpsc::channel();
 
+    let aeron_dir_for_acceptor = aeron_dir.display().to_string();
     let acceptor = thread::spawn(move || -> io::Result<()> {
-        let mut transport = build_transport(TransportConfig::aeron_ipc(stream_id))?;
+        let mut transport = build_transport(TransportConfig {
+            aeron_stream_id: stream_id,
+            aeron_dir: Some(aeron_dir_for_acceptor),
+            ..TransportConfig::default()
+        })?;
         transport.bind("127.0.0.1", 0)?;
 
         let session = Session::new(SessionConfig {
@@ -42,11 +56,13 @@ fn test_aeron_is_the_default_end_to_end_integration_path() {
         engine.run_acceptor(&mut app)
     });
 
+    let aeron_dir_for_initiator = aeron_dir.display().to_string();
     let initiator = thread::spawn(move || -> io::Result<()> {
         thread::sleep(Duration::from_millis(10));
 
         let config = TransportConfig {
             aeron_stream_id: stream_id,
+            aeron_dir: Some(aeron_dir_for_initiator),
             ..TransportConfig::default()
         };
         let mut transport = build_transport(config)?;
@@ -78,6 +94,38 @@ fn test_aeron_is_the_default_end_to_end_integration_path() {
 
     initiator.join().unwrap().unwrap();
     acceptor.join().unwrap().unwrap();
+
+    stop_child(&mut driver);
+    let _ = std::fs::remove_dir_all(&aeron_dir);
+    let _ = std::fs::remove_file(&ready_file);
+}
+
+fn spawn_media_driver(aeron_dir: &std::path::Path, ready_file: &std::path::Path) -> Child {
+    Command::new(env!("CARGO_BIN_EXE_aeron_media_driver"))
+        .arg("--aeron-dir")
+        .arg(aeron_dir)
+        .arg("--ready-file")
+        .arg(ready_file)
+        .arg("--delete-dir-on-exit")
+        .spawn()
+        .expect("failed to start standalone Aeron media driver")
+}
+
+fn wait_for_file(path: &std::path::Path, timeout: Duration) {
+    let start = std::time::Instant::now();
+    while start.elapsed() < timeout {
+        if path.exists() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    panic!("timed out waiting for ready file {}", path.display());
+}
+
+fn stop_child(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 struct AcceptorApp;

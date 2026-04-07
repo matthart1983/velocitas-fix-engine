@@ -1,0 +1,10 @@
+[package]
+name = "velocitas_fix_sbe"
+version = "0.1.0"
+authors = ["sbetool"]
+description = "Velocitas FIX Aeron transport and internal business messages"
+edition = "2021"
+
+[lib]
+name = "velocitas_fix_sbe"
+path = "src/lib.rs"

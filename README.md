@@ -190,11 +190,18 @@ velocitas-fix-engine/
 
 - Rust 1.75+ (stable)
 - Cargo
+- CMake when building the official Aeron C client/driver from source
+- An official Aeron source checkout at `AERON_SOURCE_DIR`, `vendor/aeron`, or `/tmp/aeron-official`, unless you point `AERON_LIB_DIR` at prebuilt `libaeron`/`libaeron_driver` binaries
 
 ### Build
 
 ```bash
 # Standard build (Aeron IPC integration enabled by default)
+export AERON_SOURCE_DIR=/path/to/aeron
+cargo build --release
+
+# Or link against prebuilt official Aeron libraries instead of invoking CMake
+export AERON_LIB_DIR=/path/to/aeron/build/lib
 cargo build --release
 
 # With TLS support
@@ -212,6 +219,12 @@ cargo build --release --features dpdk
 ```bash
 # Default Aeron IPC initiator/acceptor demo
 cargo run --release --bin aeron_demo
+
+# Aeron local codec + live round-trip benchmarks
+cargo run --release --bin aeron_demo benchmark
+
+# Optional: shared standalone Aeron media driver for multi-process setups
+cargo run --release --bin aeron_media_driver -- --aeron-dir /tmp/velocitas-fix-aeron
 
 # Full engine capability demo
 cargo run --release --bin demo
@@ -330,13 +343,23 @@ let wire_msg = &buf[..len]; // ready to send
 
 For a dedicated step-by-step setup guide, see [AERON.md](AERON.md).
 
+The default Aeron transport uses manual FFI wrappers over the official Aeron C client and media driver, wraps FIX payloads in an official SBE-generated Rust envelope, and publishes them onto the configured Aeron channel. The transport default expects a standalone media driver using the shared default Aeron directory, while embedded mode remains available as an explicit opt-in. The `aeron_demo` binary is friendlier for demos and automatically spawns its own standalone driver child process.
+
 ```rust
 use velocitas_fix::transport::{build_transport, TransportConfig};
 
-let mut acceptor = build_transport(TransportConfig::aeron_ipc(1001))?;
+let mut acceptor = build_transport(TransportConfig {
+    aeron_stream_id: 1001,
+    aeron_dir: Some("/tmp/velocitas-fix-aeron".into()),
+    ..TransportConfig::default()
+})?;
 acceptor.bind("127.0.0.1", 0)?;
 
-let mut initiator = build_transport(TransportConfig::default())?;
+let mut initiator = build_transport(TransportConfig {
+    aeron_stream_id: 1001,
+    aeron_dir: Some("/tmp/velocitas-fix-aeron".into()),
+    ..TransportConfig::default()
+})?;
 initiator.connect("127.0.0.1", 0)?;
 
 // Feed either transport into FixEngine::new_acceptor(...) or

@@ -9,11 +9,15 @@ Set Theme "Catppuccin Mocha"
 Set TypingSpeed 50ms
 Set PlaybackSpeed 1
 
-Type "cargo run --release --bin demo"
+Type "cargo run --release --bin aeron_demo"
 Enter
-Sleep 45s
+Sleep 12s
 
 Sleep 2s
-Type "cargo run --release --bin session_demo"
+Type "clear"
+Enter
+Sleep 1s
+
+Type "cargo run --release --bin aeron_demo benchmark"
 Enter
 Sleep 8s

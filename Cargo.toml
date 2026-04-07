@@ -20,6 +20,10 @@ rustls = { version = "0.23", optional = true }
 memmap2 = "0.9"
 crossbeam-utils = "0.8"
 hdrhistogram = "7.5"
+velocitas_fix_sbe = { path = "generated/rust/velocitas_fix_sbe" }
+
+[build-dependencies]
+cmake = "0.1"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
