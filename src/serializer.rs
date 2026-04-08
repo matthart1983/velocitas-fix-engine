@@ -2,7 +2,6 @@
 ///
 /// Builds FIX messages directly into pre-allocated byte buffers.
 /// No heap allocations. Uses lookup tables for fast integer-to-ASCII conversion.
-
 use crate::checksum;
 use crate::tags::{self, EQUALS, SOH};
 
@@ -361,6 +360,93 @@ pub fn build_new_order_single(
     ser.finalize()
 }
 
+/// Convenience function to build an OrderCancelRequest message.
+pub fn build_order_cancel_request(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    orig_cl_ord_id: &[u8],
+    cl_ord_id: &[u8],
+    symbol: &[u8],
+    side: u8,
+    qty: i64,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"F")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_str(tags::ORIG_CL_ORD_ID, orig_cl_ord_id)
+        .add_str(tags::CL_ORD_ID, cl_ord_id)
+        .add_str(tags::SYMBOL, symbol)
+        .add_str(tags::SIDE, &[side])
+        .add_int(tags::ORDER_QTY, qty)
+        .add_str(tags::TRANSACT_TIME, sending_time);
+    ser.finalize()
+}
+
+/// Convenience function to build an OrderCancelReplaceRequest message.
+pub fn build_order_cancel_replace_request(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    orig_cl_ord_id: &[u8],
+    cl_ord_id: &[u8],
+    symbol: &[u8],
+    side: u8,
+    qty: i64,
+    ord_type: u8,
+    price: &[u8],
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"G")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_str(tags::ORIG_CL_ORD_ID, orig_cl_ord_id)
+        .add_str(tags::CL_ORD_ID, cl_ord_id)
+        .add_str(tags::SYMBOL, symbol)
+        .add_str(tags::SIDE, &[side])
+        .add_int(tags::ORDER_QTY, qty)
+        .add_str(tags::ORD_TYPE, &[ord_type])
+        .add_str(tags::PRICE, price)
+        .add_str(tags::TRANSACT_TIME, sending_time)
+        .add_str(tags::HANDL_INST, b"1");
+    ser.finalize()
+}
+
+/// Convenience function to build an OrderStatusRequest message.
+pub fn build_order_status_request(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    cl_ord_id: &[u8],
+    symbol: &[u8],
+    side: u8,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"H")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_str(tags::CL_ORD_ID, cl_ord_id)
+        .add_str(tags::SYMBOL, symbol)
+        .add_str(tags::SIDE, &[side]);
+    ser.finalize()
+}
+
 /// Convenience function to build an ExecutionReport message.
 pub fn build_execution_report(
     buf: &mut [u8],
@@ -383,6 +469,53 @@ pub fn build_execution_report(
     exec_type: u8,
     ord_status: u8,
 ) -> usize {
+    build_execution_report_with_orig_cl_ord_id(
+        buf,
+        begin_string,
+        sender,
+        target,
+        seq_num,
+        sending_time,
+        order_id,
+        exec_id,
+        cl_ord_id,
+        None,
+        symbol,
+        side,
+        ord_qty,
+        last_qty,
+        last_px,
+        leaves_qty,
+        cum_qty,
+        avg_px,
+        exec_type,
+        ord_status,
+    )
+}
+
+/// Convenience function to build an ExecutionReport message with optional OrigClOrdID.
+pub fn build_execution_report_with_orig_cl_ord_id(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    order_id: &[u8],
+    exec_id: &[u8],
+    cl_ord_id: &[u8],
+    orig_cl_ord_id: Option<&[u8]>,
+    symbol: &[u8],
+    side: u8,
+    ord_qty: i64,
+    last_qty: i64,
+    last_px: &[u8],
+    leaves_qty: i64,
+    cum_qty: i64,
+    avg_px: &[u8],
+    exec_type: u8,
+    ord_status: u8,
+) -> usize {
     let mut ser = FixSerializer::new(buf);
     ser.begin(begin_string, b"8")
         .add_str(tags::SENDER_COMP_ID, sender)
@@ -391,8 +524,11 @@ pub fn build_execution_report(
         .add_str(tags::SENDING_TIME, sending_time)
         .add_str(tags::ORDER_ID, order_id)
         .add_str(tags::EXEC_ID, exec_id)
-        .add_str(tags::CL_ORD_ID, cl_ord_id)
-        .add_str(tags::EXEC_TYPE, &[exec_type])
+        .add_str(tags::CL_ORD_ID, cl_ord_id);
+    if let Some(orig_cl_ord_id) = orig_cl_ord_id {
+        ser.add_str(tags::ORIG_CL_ORD_ID, orig_cl_ord_id);
+    }
+    ser.add_str(tags::EXEC_TYPE, &[exec_type])
         .add_str(tags::ORD_STATUS, &[ord_status])
         .add_str(tags::SYMBOL, symbol)
         .add_str(tags::SIDE, &[side])
@@ -403,6 +539,42 @@ pub fn build_execution_report(
         .add_int(tags::CUM_QTY, cum_qty)
         .add_str(tags::AVG_PX, avg_px)
         .add_str(tags::TRANSACT_TIME, sending_time);
+    ser.finalize()
+}
+
+/// Convenience function to build an OrderCancelReject message.
+pub fn build_order_cancel_reject(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    order_id: &[u8],
+    cl_ord_id: &[u8],
+    orig_cl_ord_id: &[u8],
+    ord_status: u8,
+    cxl_rej_response_to: u8,
+    cxl_rej_reason: Option<i64>,
+    text: Option<&[u8]>,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"9")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_str(tags::ORDER_ID, order_id)
+        .add_str(tags::CL_ORD_ID, cl_ord_id)
+        .add_str(tags::ORIG_CL_ORD_ID, orig_cl_ord_id)
+        .add_str(tags::ORD_STATUS, &[ord_status])
+        .add_str(tags::CXL_REJ_RESPONSE_TO, &[cxl_rej_response_to]);
+    if let Some(cxl_rej_reason) = cxl_rej_reason {
+        ser.add_int(tags::CXL_REJ_REASON, cxl_rej_reason);
+    }
+    if let Some(text) = text {
+        ser.add_str(tags::TEXT, text);
+    }
     ser.finalize()
 }
 
@@ -426,7 +598,9 @@ mod tests {
         let msg = &buf[..len];
         // Verify it parses back
         let parser = FixParser::new();
-        let (view, consumed) = parser.parse(msg).expect("should parse serialized heartbeat");
+        let (view, consumed) = parser
+            .parse(msg)
+            .expect("should parse serialized heartbeat");
         assert_eq!(consumed, len);
         assert_eq!(view.msg_type(), Some(b"0".as_slice()));
         assert_eq!(view.sender_comp_id(), Some("SENDER"));
@@ -492,6 +666,128 @@ mod tests {
         assert_eq!(view.msg_type(), Some(b"8".as_slice()));
         assert_eq!(view.get_field_str(tags::ORDER_ID), Some("NYSE-ORD-001"));
         assert_eq!(view.get_field_i64(tags::LAST_QTY), Some(500));
+    }
+
+    #[test]
+    fn test_serialize_order_lifecycle_requests() {
+        let parser = FixParser::new();
+        let mut buf = [0u8; 1024];
+
+        let len = build_order_cancel_request(
+            &mut buf,
+            b"FIX.4.4",
+            b"BANK_OMS",
+            b"NYSE",
+            43,
+            b"20260321-10:00:00.123",
+            b"ORD-00001",
+            b"CXL-00001",
+            b"AAPL",
+            b'1',
+            1000,
+        );
+        let (view, _) = parser.parse(&buf[..len]).expect("should parse cancel req");
+        assert_eq!(view.msg_type(), Some(b"F".as_slice()));
+        assert_eq!(view.get_field_str(tags::ORIG_CL_ORD_ID), Some("ORD-00001"));
+        assert_eq!(view.get_field_str(tags::CL_ORD_ID), Some("CXL-00001"));
+
+        let len = build_order_cancel_replace_request(
+            &mut buf,
+            b"FIX.4.4",
+            b"BANK_OMS",
+            b"NYSE",
+            44,
+            b"20260321-10:00:00.124",
+            b"ORD-00001",
+            b"RPL-00001",
+            b"AAPL",
+            b'1',
+            1200,
+            b'2',
+            b"150.75",
+        );
+        let (view, _) = parser.parse(&buf[..len]).expect("should parse replace req");
+        assert_eq!(view.msg_type(), Some(b"G".as_slice()));
+        assert_eq!(view.get_field_str(tags::ORIG_CL_ORD_ID), Some("ORD-00001"));
+        assert_eq!(view.get_field_str(tags::CL_ORD_ID), Some("RPL-00001"));
+        assert_eq!(view.get_field_str(tags::PRICE), Some("150.75"));
+
+        let len = build_order_status_request(
+            &mut buf,
+            b"FIX.4.4",
+            b"BANK_OMS",
+            b"NYSE",
+            45,
+            b"20260321-10:00:00.125",
+            b"RPL-00001",
+            b"AAPL",
+            b'1',
+        );
+        let (view, _) = parser.parse(&buf[..len]).expect("should parse status req");
+        assert_eq!(view.msg_type(), Some(b"H".as_slice()));
+        assert_eq!(view.get_field_str(tags::CL_ORD_ID), Some("RPL-00001"));
+        assert_eq!(view.get_field_str(tags::SYMBOL), Some("AAPL"));
+    }
+
+    #[test]
+    fn test_serialize_order_cancel_reject_and_execution_report_with_orig_cl_ord_id() {
+        let parser = FixParser::new();
+        let mut buf = [0u8; 2048];
+
+        let len = build_execution_report_with_orig_cl_ord_id(
+            &mut buf,
+            b"FIX.4.4",
+            b"NYSE",
+            b"BANK_OMS",
+            101,
+            b"20260321-10:00:00.457",
+            b"NYSE-ORD-001",
+            b"NYSE-EXEC-002",
+            b"RPL-00001",
+            Some(b"ORD-00001"),
+            b"AAPL",
+            b'1',
+            1200,
+            0,
+            b"0",
+            1200,
+            0,
+            b"0",
+            b'5',
+            b'5',
+        );
+        let (view, _) = parser
+            .parse(&buf[..len])
+            .expect("should parse replace execution report");
+        assert_eq!(view.msg_type(), Some(b"8".as_slice()));
+        assert_eq!(view.get_field_str(tags::ORIG_CL_ORD_ID), Some("ORD-00001"));
+
+        let len = build_order_cancel_reject(
+            &mut buf,
+            b"FIX.4.4",
+            b"NYSE",
+            b"BANK_OMS",
+            102,
+            b"20260321-10:00:00.458",
+            b"NYSE-ORD-001",
+            b"CXL-00002",
+            b"RPL-00001",
+            b'4',
+            b'1',
+            Some(1),
+            Some(b"order already canceled"),
+        );
+        let (view, _) = parser
+            .parse(&buf[..len])
+            .expect("should parse cancel reject");
+        assert_eq!(view.msg_type(), Some(b"9".as_slice()));
+        assert_eq!(view.get_field_str(tags::ORDER_ID), Some("NYSE-ORD-001"));
+        assert_eq!(view.get_field_str(tags::CL_ORD_ID), Some("CXL-00002"));
+        assert_eq!(view.get_field_str(tags::ORIG_CL_ORD_ID), Some("RPL-00001"));
+        assert_eq!(
+            view.get_field_str(tags::TEXT),
+            Some("order already canceled")
+        );
     }
 
     #[test]

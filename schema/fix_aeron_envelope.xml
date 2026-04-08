@@ -55,4 +55,44 @@
         <data name="OrderId" id="12" type="varStringEncoding"/>
         <data name="ExecId" id="13" type="varStringEncoding"/>
     </sbe:message>
+
+    <sbe:message name="NormalizedCancelRequest" id="4" description="Normalized internal OrderCancelRequest business message">
+        <field name="Side" id="1" type="uint8"/>
+        <field name="Qty" id="2" type="int64"/>
+        <data name="ClOrdId" id="3" type="varStringEncoding"/>
+        <data name="OrigClOrdId" id="4" type="varStringEncoding"/>
+        <data name="Symbol" id="5" type="varStringEncoding"/>
+        <data name="SenderCompId" id="6" type="varStringEncoding"/>
+        <data name="TargetCompId" id="7" type="varStringEncoding"/>
+    </sbe:message>
+
+    <sbe:message name="NormalizedReplaceRequest" id="5" description="Normalized internal OrderCancelReplaceRequest business message">
+        <field name="Side" id="1" type="uint8"/>
+        <field name="Qty" id="2" type="int64"/>
+        <data name="ClOrdId" id="3" type="varStringEncoding"/>
+        <data name="OrigClOrdId" id="4" type="varStringEncoding"/>
+        <data name="Symbol" id="5" type="varStringEncoding"/>
+        <data name="Price" id="6" type="varStringEncoding"/>
+        <data name="SenderCompId" id="7" type="varStringEncoding"/>
+        <data name="TargetCompId" id="8" type="varStringEncoding"/>
+    </sbe:message>
+
+    <sbe:message name="NormalizedOrderStatusRequest" id="6" description="Normalized internal OrderStatusRequest business message">
+        <field name="Side" id="1" type="uint8"/>
+        <data name="ClOrdId" id="2" type="varStringEncoding"/>
+        <data name="OrderId" id="3" type="varStringEncoding"/>
+        <data name="Symbol" id="4" type="varStringEncoding"/>
+        <data name="SenderCompId" id="5" type="varStringEncoding"/>
+        <data name="TargetCompId" id="6" type="varStringEncoding"/>
+    </sbe:message>
+
+    <sbe:message name="NormalizedCancelReject" id="7" description="Normalized internal OrderCancelReject business message">
+        <field name="OrdStatus" id="1" type="uint8"/>
+        <field name="CxlRejResponseTo" id="2" type="uint8"/>
+        <field name="CxlRejReason" id="3" type="int32"/>
+        <data name="OrderId" id="4" type="varStringEncoding"/>
+        <data name="ClOrdId" id="5" type="varStringEncoding"/>
+        <data name="OrigClOrdId" id="6" type="varStringEncoding"/>
+        <data name="Text" id="7" type="varStringEncoding"/>
+    </sbe:message>
 </sbe:messageSchema>
