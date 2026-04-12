@@ -2,7 +2,6 @@
 /// over localhost TCP, for direct comparison with QuickFIX/J TCP benchmark.
 ///
 /// Usage: cargo run --release --bin bench_tcp [-- --count 10000]
-
 use std::io;
 use std::net::TcpListener;
 use std::sync::mpsc;
@@ -12,7 +11,7 @@ use std::time::{Duration, Instant};
 use velocitas_fix::engine::{EngineContext, FixApp, FixEngine};
 use velocitas_fix::message::MessageView;
 use velocitas_fix::serializer;
-use velocitas_fix::session::{Session, SessionConfig, SessionRole, SequenceResetPolicy};
+use velocitas_fix::session::{SequenceResetPolicy, Session, SessionConfig, SessionRole};
 use velocitas_fix::tags;
 use velocitas_fix::timestamp::{HrTimestamp, TimestampSource};
 use velocitas_fix::transport::Transport;
@@ -55,10 +54,19 @@ fn main() {
     latencies_report(&latencies);
 
     println!();
-    println!("  Session total:             {:.1} ms", session_elapsed.as_secs_f64() * 1000.0);
-    println!("  Application messages:      {} ({} round-trips)", total_msgs, count);
+    println!(
+        "  Session total:             {:.1} ms",
+        session_elapsed.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Application messages:      {} ({} round-trips)",
+        total_msgs, count
+    );
     println!("  Throughput:                {:.0} msgs/sec", msgs_per_sec);
-    println!("  Round-trips/sec:           {:.0}", count as f64 / session_elapsed.as_secs_f64());
+    println!(
+        "  Round-trips/sec:           {:.0}",
+        count as f64 / session_elapsed.as_secs_f64()
+    );
     println!();
 }
 
@@ -115,8 +123,8 @@ fn run_acceptor(listener: TcpListener, ready_tx: mpsc::Sender<()>) {
     let (stream, _) = listener.accept().expect("accept failed");
     stream.set_nodelay(true).unwrap();
 
-    let transport = StdTcpTransport::from_stream(stream, TransportConfig::kernel_tcp())
-        .expect("wrap failed");
+    let transport =
+        StdTcpTransport::from_stream(stream, TransportConfig::kernel_tcp()).expect("wrap failed");
 
     let session = Session::new(SessionConfig {
         session_id: "BENCH-ACC".into(),
@@ -142,7 +150,12 @@ fn run_acceptor(listener: TcpListener, ready_tx: mpsc::Sender<()>) {
 struct BenchAcceptorApp;
 
 impl FixApp for BenchAcceptorApp {
-    fn on_message(&mut self, msg_type: &[u8], msg: &MessageView<'_>, ctx: &mut EngineContext<'_>) -> io::Result<()> {
+    fn on_message(
+        &mut self,
+        msg_type: &[u8],
+        msg: &MessageView<'_>,
+        ctx: &mut EngineContext<'_>,
+    ) -> io::Result<()> {
         if msg_type == b"D" {
             let ts = HrTimestamp::now(TimestampSource::System).to_fix_timestamp();
             let seq = ctx.next_seq_num();
@@ -155,9 +168,24 @@ impl FixApp for BenchAcceptorApp {
             let mut buf = [0u8; 2048];
             let len = serializer::build_execution_report(
                 &mut buf,
-                b"FIX.4.4", sender.as_bytes(), target.as_bytes(), seq, &ts,
-                b"ORD-001", b"EXEC-001", cl_ord_id, symbol,
-                b'1', qty, qty, b"100.00", 0, qty, b"100.00", b'F', b'2',
+                b"FIX.4.4",
+                sender.as_bytes(),
+                target.as_bytes(),
+                seq,
+                &ts,
+                b"ORD-001",
+                b"EXEC-001",
+                cl_ord_id,
+                symbol,
+                b'1',
+                qty,
+                qty,
+                b"100.00",
+                0,
+                qty,
+                b"100.00",
+                b'F',
+                b'2',
             );
             ctx.send_raw(&buf[..len])?;
         }
@@ -173,7 +201,9 @@ fn run_initiator(port: u16, count: usize) -> (Duration, Vec<Duration>) {
     thread::sleep(Duration::from_millis(50));
 
     let mut transport = StdTcpTransport::new(TransportConfig::kernel_tcp());
-    transport.connect("127.0.0.1", port).expect("connect failed");
+    transport
+        .connect("127.0.0.1", port)
+        .expect("connect failed");
 
     let session = Session::new(SessionConfig {
         session_id: "BENCH-INIT".into(),
@@ -223,8 +253,17 @@ impl BenchInitiatorApp {
         let cl_ord_id = format!("ORD-{:08}", self.sent);
         let len = serializer::build_new_order_single(
             &mut buf,
-            b"FIX.4.4", sender.as_bytes(), target.as_bytes(), seq, &ts,
-            cl_ord_id.as_bytes(), b"AAPL", b'1', 100, b'2', b"100.00",
+            b"FIX.4.4",
+            sender.as_bytes(),
+            target.as_bytes(),
+            seq,
+            &ts,
+            cl_ord_id.as_bytes(),
+            b"AAPL",
+            b'1',
+            100,
+            b'2',
+            b"100.00",
         );
         self.send_time = Instant::now();
         ctx.send_raw(&buf[..len])?;
@@ -240,7 +279,12 @@ impl FixApp for BenchInitiatorApp {
         self.send_nos(ctx)
     }
 
-    fn on_message(&mut self, msg_type: &[u8], _msg: &MessageView<'_>, ctx: &mut EngineContext<'_>) -> io::Result<()> {
+    fn on_message(
+        &mut self,
+        msg_type: &[u8],
+        _msg: &MessageView<'_>,
+        ctx: &mut EngineContext<'_>,
+    ) -> io::Result<()> {
         if msg_type == b"8" {
             // Record latency
             let rtt = self.send_time.elapsed();

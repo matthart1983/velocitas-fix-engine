@@ -4,7 +4,6 @@
 /// timestamps (SO_TIMESTAMPING on Linux), and PTP-synchronized clocks.
 /// Provides FIX-protocol timestamp formatting at millisecond, microsecond,
 /// and nanosecond precision (MiFID II compliant).
-
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
@@ -174,8 +173,7 @@ impl HrClock {
         match self.source {
             TimestampSource::Tsc => {
                 let tsc = Self::read_tsc();
-                let nanos = tsc_to_nanos(tsc, self.tsc_frequency_hz)
-                    .wrapping_add(self.tsc_offset);
+                let nanos = tsc_to_nanos(tsc, self.tsc_frequency_hz).wrapping_add(self.tsc_offset);
                 HrTimestamp {
                     nanos,
                     source: TimestampSource::Tsc,
@@ -385,7 +383,10 @@ mod tests {
     fn now_returns_increasing_values() {
         let t1 = HrTimestamp::now(TimestampSource::System);
         let t2 = HrTimestamp::now(TimestampSource::System);
-        assert!(t2.nanos >= t1.nanos, "timestamps must be monotonically non-decreasing");
+        assert!(
+            t2.nanos >= t1.nanos,
+            "timestamps must be monotonically non-decreasing"
+        );
     }
 
     #[test]
@@ -501,7 +502,10 @@ mod tests {
         std::hint::black_box(0u64.wrapping_add(1));
         let elapsed = tracker.stop();
         // Elapsed should be >= 0 (can be 0 on very fast systems, but not negative).
-        assert!(elapsed < 1_000_000_000, "elapsed should be well under 1 second");
+        assert!(
+            elapsed < 1_000_000_000,
+            "elapsed should be well under 1 second"
+        );
     }
 
     #[test]

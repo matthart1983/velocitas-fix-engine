@@ -8,7 +8,6 @@
 /// 2. Extract tag number via fast integer parsing
 /// 3. Record offset/length of value in the field index
 /// 4. Validate BeginString, BodyLength, and Checksum
-
 use crate::checksum;
 use crate::message::MessageView;
 use crate::tags::{self, EQUALS, SOH};
@@ -92,9 +91,43 @@ impl FixParser {
     /// only the first complete message is parsed.
     #[inline]
     pub fn parse<'a>(&self, buffer: &'a [u8]) -> Result<(MessageView<'a>, usize), ParseError> {
+        match self.parse_prefix_inner(buffer, false)? {
+            Some(parsed) => Ok(parsed),
+            None => {
+                if buffer.len() < 20 {
+                    Err(ParseError::BufferTooShort)
+                } else {
+                    Err(ParseError::MalformedField)
+                }
+            }
+        }
+    }
+
+    /// Attempt to parse the first complete FIX message prefix from a buffer.
+    ///
+    /// Returns `Ok(None)` when the current buffer is not yet large enough to
+    /// contain a full message, which lets stream processors avoid a separate
+    /// framing scan before parsing.
+    #[inline]
+    pub fn try_parse_prefix<'a>(
+        &self,
+        buffer: &'a [u8],
+    ) -> Result<Option<(MessageView<'a>, usize)>, ParseError> {
+        self.parse_prefix_inner(buffer, true)
+    }
+
+    fn parse_prefix_inner<'a>(
+        &self,
+        buffer: &'a [u8],
+        allow_incomplete: bool,
+    ) -> Result<Option<(MessageView<'a>, usize)>, ParseError> {
         let len = buffer.len();
         if len < 20 {
-            return Err(ParseError::BufferTooShort);
+            return if allow_incomplete {
+                Ok(None)
+            } else {
+                Err(ParseError::BufferTooShort)
+            };
         }
         if len > self.max_message_size {
             return Err(ParseError::MessageTooLarge);
@@ -105,11 +138,13 @@ impl FixParser {
         let mut field_num = 0;
         let mut body_start = 0;
         let mut stated_body_length: usize = 0;
+        let mut checksum_tag_start = None;
+        let mut checksum_value = None;
 
         // Parse all tag=value\x01 fields
         while pos < len {
             // Parse tag number
-            let _tag_start = pos;
+            let tag_start = pos;
             let mut tag: u32 = 0;
             while pos < len && buffer[pos] != EQUALS {
                 let b = buffer[pos];
@@ -120,8 +155,12 @@ impl FixParser {
                 pos += 1;
             }
 
-            if pos >= len || buffer[pos] != EQUALS {
-                return Err(ParseError::MalformedField);
+            if pos >= len {
+                return if allow_incomplete {
+                    Ok(None)
+                } else {
+                    Err(ParseError::MalformedField)
+                };
             }
             pos += 1; // skip '='
 
@@ -134,7 +173,11 @@ impl FixParser {
             }
 
             if pos >= len {
-                return Err(ParseError::MalformedField);
+                return if allow_incomplete {
+                    Ok(None)
+                } else {
+                    Err(ParseError::MalformedField)
+                };
             }
 
             let value_len = pos - value_start;
@@ -152,10 +195,9 @@ impl FixParser {
                         return Err(ParseError::MissingBodyLength);
                     }
                     // Parse body length value
-                    stated_body_length = 0;
-                    for &b in &buffer[value_start..value_start + value_len] {
-                        stated_body_length = stated_body_length * 10 + (b - b'0') as usize;
-                    }
+                    stated_body_length =
+                        parse_usize_ascii(&buffer[value_start..value_start + value_len])
+                            .ok_or(ParseError::InvalidBodyLength)?;
                     body_start = pos;
                 }
                 2 => {
@@ -171,30 +213,52 @@ impl FixParser {
 
             // If this is the checksum field, we're done
             if tag == tags::CHECKSUM {
+                checksum_tag_start = Some(tag_start);
+                checksum_value = Some((value_start, value_len));
                 break;
             }
 
             field_num += 1;
         }
 
+        let Some(checksum_tag_start) = checksum_tag_start else {
+            return if allow_incomplete {
+                Ok(None)
+            } else {
+                Err(ParseError::MalformedField)
+            };
+        };
+        let Some((checksum_value_start, checksum_value_len)) = checksum_value else {
+            return Err(ParseError::InvalidChecksum);
+        };
+
         let consumed = pos;
 
         // Validate body length
         if self.validate_body_length && body_start > 0 {
-            // Body length is from after "9=NNN\x01" to before "10=XXX\x01"
-            // Find where the checksum tag starts
-            let checksum_tag_start = find_checksum_tag_start(buffer, consumed);
-            if checksum_tag_start > 0 {
-                let actual_body_length = checksum_tag_start - body_start;
-                if actual_body_length != stated_body_length {
-                    return Err(ParseError::InvalidBodyLength);
-                }
+            // Body length is from after "9=NNN\x01" to before "10=XXX\x01".
+            let actual_body_length = checksum_tag_start - body_start;
+            if actual_body_length != stated_body_length {
+                return Err(ParseError::InvalidBodyLength);
             }
         }
 
         // Validate checksum
         if self.validate_checksum {
-            let valid = checksum::validate(&buffer[..consumed]);
+            let valid = if checksum_value_len == 3 {
+                let stated_bytes = &buffer[checksum_value_start..checksum_value_start + 3];
+                if stated_bytes.iter().all(|b| b.is_ascii_digit()) {
+                    let computed = checksum::compute(&buffer[..checksum_tag_start]);
+                    let stated = (stated_bytes[0] - b'0') * 100
+                        + (stated_bytes[1] - b'0') * 10
+                        + (stated_bytes[2] - b'0');
+                    computed == stated
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
             view.set_checksum_valid(valid);
             if !valid {
                 return Err(ParseError::InvalidChecksum);
@@ -203,7 +267,7 @@ impl FixParser {
             view.set_checksum_valid(true);
         }
 
-        Ok((view, consumed))
+        Ok(Some((view, consumed)))
     }
 
     /// Attempt to find a complete message in the buffer.
@@ -241,22 +305,21 @@ impl Default for FixParser {
     }
 }
 
-/// Find the start of the checksum tag (byte position of "10=" before the last SOH).
 #[inline]
-fn find_checksum_tag_start(buffer: &[u8], end: usize) -> usize {
-    if end < 7 {
-        return 0;
+fn parse_usize_ascii(bytes: &[u8]) -> Option<usize> {
+    if bytes.is_empty() {
+        return None;
     }
-    for i in (0..end - 4).rev() {
-        if buffer[i] == SOH && buffer[i + 1] == b'1' && buffer[i + 2] == b'0' && buffer[i + 3] == b'=' {
-            return i + 1;
+
+    let mut value = 0usize;
+    for &b in bytes {
+        if !b.is_ascii_digit() {
+            return None;
         }
+        value = value * 10 + (b - b'0') as usize;
     }
-    // Check if message starts with "10="
-    if buffer[0] == b'1' && buffer[1] == b'0' && buffer[2] == b'=' {
-        return 0;
-    }
-    0
+
+    Some(value)
 }
 
 #[cfg(test)]
@@ -353,7 +416,10 @@ mod tests {
     #[test]
     fn test_parse_buffer_too_short() {
         let parser = FixParser::new();
-        assert_eq!(parser.parse(b"8=FIX").unwrap_err(), ParseError::BufferTooShort);
+        assert_eq!(
+            parser.parse(b"8=FIX").unwrap_err(),
+            ParseError::BufferTooShort
+        );
     }
 
     #[test]
@@ -365,6 +431,30 @@ mod tests {
         let parser = FixParser::new();
         let boundary = parser.find_message_boundary(&msg);
         assert_eq!(boundary, Some(msg.len()));
+    }
+
+    #[test]
+    fn test_try_parse_prefix_incomplete_returns_none() {
+        let parser = FixParser::new();
+        assert!(parser.try_parse_prefix(b"8=FIX.4.4\x01").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_try_parse_prefix_consumes_only_first_message() {
+        let first = build_fix_msg(&format!(
+            "35=0\x0149=S\x0156=T\x0134=1\x0152=20260321-10:00:00\x01"
+        ));
+        let second = build_fix_msg(&format!(
+            "35=0\x0149=S\x0156=T\x0134=2\x0152=20260321-10:00:01\x01"
+        ));
+        let mut buffer = first.clone();
+        buffer.extend_from_slice(&second);
+
+        let parser = FixParser::new();
+        let (view, consumed) = parser.try_parse_prefix(&buffer).unwrap().unwrap();
+
+        assert_eq!(consumed, first.len());
+        assert_eq!(view.msg_seq_num(), Some(1));
     }
 
     #[test]

@@ -5,7 +5,6 @@
 /// - Checksum is always valid after serialization
 /// - Field values survive the roundtrip intact
 /// - Parser never panics on arbitrary input
-
 use proptest::prelude::*;
 use velocitas_fix::parser::FixParser;
 use velocitas_fix::serializer;
@@ -13,30 +12,35 @@ use velocitas_fix::tags;
 
 /// Strategy for generating valid CompIDs (alphanumeric, 1–16 chars).
 fn comp_id_strategy() -> impl Strategy<Value = Vec<u8>> {
-    prop::collection::vec(prop::sample::select(
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".to_vec()
-    ), 1..=16)
+    prop::collection::vec(
+        prop::sample::select(
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".to_vec(),
+        ),
+        1..=16,
+    )
 }
 
 /// Strategy for generating valid ClOrdIDs.
 fn cl_ord_id_strategy() -> impl Strategy<Value = Vec<u8>> {
-    prop::collection::vec(prop::sample::select(
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".to_vec()
-    ), 1..=20)
+    prop::collection::vec(
+        prop::sample::select(
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".to_vec(),
+        ),
+        1..=20,
+    )
 }
 
 /// Strategy for generating valid symbols.
 fn symbol_strategy() -> impl Strategy<Value = Vec<u8>> {
-    prop::collection::vec(prop::sample::select(
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.".to_vec()
-    ), 1..=8)
+    prop::collection::vec(
+        prop::sample::select(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.".to_vec()),
+        1..=8,
+    )
 }
 
 /// Strategy for generating valid prices.
 fn price_strategy() -> impl Strategy<Value = Vec<u8>> {
-    (1u32..999999, 0u32..99).prop_map(|(whole, frac)| {
-        format!("{}.{:02}", whole, frac).into_bytes()
-    })
+    (1u32..999999, 0u32..99).prop_map(|(whole, frac)| format!("{}.{:02}", whole, frac).into_bytes())
 }
 
 /// Strategy for generating valid quantities.

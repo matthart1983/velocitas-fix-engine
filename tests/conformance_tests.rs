@@ -1,13 +1,11 @@
+use velocitas_fix::checksum;
 /// FIX Protocol Conformance Tests
 ///
 /// Validates compliance with the FIX 4.4 specification requirements.
 /// These tests use pre-built wire-format messages to verify correct parsing
 /// of real-world FIX message patterns.
-
 use velocitas_fix::parser::FixParser;
-use velocitas_fix::serializer;
 use velocitas_fix::tags;
-use velocitas_fix::checksum;
 
 /// Helper: build a raw FIX message from body fields, computing correct
 /// BodyLength and Checksum.
@@ -40,8 +38,8 @@ fn test_conform_first_three_fields_order() {
     let (view, _) = parser.parse(&msg).unwrap();
 
     let fields = view.fields();
-    assert_eq!(fields[0].tag, 8);  // BeginString
-    assert_eq!(fields[1].tag, 9);  // BodyLength
+    assert_eq!(fields[0].tag, 8); // BeginString
+    assert_eq!(fields[1].tag, 9); // BodyLength
     assert_eq!(fields[2].tag, 35); // MsgType
 }
 

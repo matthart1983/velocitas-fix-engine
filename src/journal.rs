@@ -2,7 +2,6 @@
 ///
 /// Uses memory-mapped files for high-performance persistence with zero-copy reads.
 /// Messages are stored in a circular buffer with CRC32 integrity checks.
-
 use std::fs::OpenOptions;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -71,12 +70,7 @@ impl Journal {
 
     /// Append a message to the journal. Returns the offset where it was written.
     #[inline]
-    pub fn append(
-        &mut self,
-        session_hash: u64,
-        seq_num: u64,
-        message: &[u8],
-    ) -> io::Result<usize> {
+    pub fn append(&mut self, session_hash: u64, seq_num: u64, message: &[u8]) -> io::Result<usize> {
         let total_size = HEADER_SIZE + message.len();
 
         // Check if we need to wrap around
@@ -120,9 +114,8 @@ impl Journal {
             return None;
         }
 
-        let header: JournalEntryHeader = unsafe {
-            std::ptr::read(self.mmap[offset..].as_ptr() as *const JournalEntryHeader)
-        };
+        let header: JournalEntryHeader =
+            unsafe { std::ptr::read(self.mmap[offset..].as_ptr() as *const JournalEntryHeader) };
 
         let body_start = offset + HEADER_SIZE;
         let body_end = body_start + header.body_length as usize;

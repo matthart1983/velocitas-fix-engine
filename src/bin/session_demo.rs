@@ -6,7 +6,6 @@
 /// 4. Clean Logout on all sessions
 ///
 /// Usage: cargo run --release --bin session_demo
-
 use std::io;
 use std::net::TcpListener;
 use std::sync::mpsc;
@@ -30,9 +29,15 @@ const RESET: &str = "\x1b[0m";
 
 fn main() {
     println!();
-    println!("{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}");
-    println!("{BOLD}{CYAN}║       ⚡  VELOCITAS — SERVER + CLIENT SESSION DEMO              ║{RESET}");
-    println!("{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}");
+    println!(
+        "{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}"
+    );
+    println!(
+        "{BOLD}{CYAN}║       ⚡  VELOCITAS — SERVER + CLIENT SESSION DEMO              ║{RESET}"
+    );
+    println!(
+        "{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}"
+    );
     println!();
 
     // Find a free port
@@ -48,11 +53,7 @@ fn main() {
             bind_address: "127.0.0.1".into(),
             port,
             sender_comp_id: "EXCHANGE".into(),
-            allowed_comp_ids: vec![
-                "CITADEL".into(),
-                "JPMORGAN".into(),
-                "GOLDMAN".into(),
-            ],
+            allowed_comp_ids: vec!["CITADEL".into(), "JPMORGAN".into(), "GOLDMAN".into()],
             ..Default::default()
         };
 
@@ -120,15 +121,23 @@ fn run_client(port: u16, comp_id: &str, symbol: &str, qty: i64) {
 struct ExchangeApp;
 
 impl FixApp for ExchangeApp {
-    fn on_message(&mut self, msg_type: &[u8], msg: &MessageView<'_>, ctx: &mut EngineContext<'_>) -> io::Result<()> {
+    fn on_message(
+        &mut self,
+        msg_type: &[u8],
+        msg: &MessageView<'_>,
+        ctx: &mut EngineContext<'_>,
+    ) -> io::Result<()> {
         if msg_type == b"D" {
             let cl_ord_id = msg.get_field(tags::CL_ORD_ID).unwrap_or(b"?");
             let symbol = msg.get_field(tags::SYMBOL).unwrap_or(b"?");
             let qty = msg.get_field_i64(tags::ORDER_QTY).unwrap_or(0);
             let from = msg.sender_comp_id().unwrap_or("?");
 
-            println!("  {YELLOW}⏱{RESET}  [EXCHANGE] {BOLD}NOS{RESET} from {from}: {} {} @ mkt",
-                std::str::from_utf8(symbol).unwrap_or("?"), qty);
+            println!(
+                "  {YELLOW}⏱{RESET}  [EXCHANGE] {BOLD}NOS{RESET} from {from}: {} {} @ mkt",
+                std::str::from_utf8(symbol).unwrap_or("?"),
+                qty
+            );
 
             let ts = HrTimestamp::now(TimestampSource::System).to_fix_timestamp();
             let seq = ctx.next_seq_num();
@@ -136,9 +145,25 @@ impl FixApp for ExchangeApp {
             let target = ctx.session().config().target_comp_id.clone();
             let mut buf = [0u8; 2048];
             let len = serializer::build_execution_report(
-                &mut buf, b"FIX.4.4", sender.as_bytes(), target.as_bytes(),
-                seq, &ts, b"ORD-001", b"EXEC-001", cl_ord_id, symbol,
-                b'1', qty, qty, b"178.55", 0, qty, b"178.55", b'F', b'2',
+                &mut buf,
+                b"FIX.4.4",
+                sender.as_bytes(),
+                target.as_bytes(),
+                seq,
+                &ts,
+                b"ORD-001",
+                b"EXEC-001",
+                cl_ord_id,
+                symbol,
+                b'1',
+                qty,
+                qty,
+                b"178.55",
+                0,
+                qty,
+                b"178.55",
+                b'F',
+                b'2',
             );
             ctx.send_raw(&buf[..len])?;
         }
@@ -159,7 +184,10 @@ struct TraderApp {
 
 impl FixApp for TraderApp {
     fn on_logon(&mut self, ctx: &mut EngineContext<'_>) -> io::Result<()> {
-        println!("  {GREEN}▸{RESET} [{}] {BOLD}Logon{RESET} — session Active", self.comp_id);
+        println!(
+            "  {GREEN}▸{RESET} [{}] {BOLD}Logon{RESET} — session Active",
+            self.comp_id
+        );
 
         let ts = HrTimestamp::now(TimestampSource::System).to_fix_timestamp();
         let seq = ctx.next_seq_num();
@@ -167,20 +195,40 @@ impl FixApp for TraderApp {
         let target = ctx.session().config().target_comp_id.clone();
         let mut buf = [0u8; 1024];
         let len = serializer::build_new_order_single(
-            &mut buf, b"FIX.4.4", sender.as_bytes(), target.as_bytes(),
-            seq, &ts, b"ORD-001", self.symbol.as_bytes(),
-            b'1', self.qty, b'2', b"178.55",
+            &mut buf,
+            b"FIX.4.4",
+            sender.as_bytes(),
+            target.as_bytes(),
+            seq,
+            &ts,
+            b"ORD-001",
+            self.symbol.as_bytes(),
+            b'1',
+            self.qty,
+            b'2',
+            b"178.55",
         );
         ctx.send_raw(&buf[..len])?;
-        println!("  {GREEN}▸{RESET} [{}] Sent {BOLD}NOS{RESET}: {} Buy {} @ 178.55", self.comp_id, self.symbol, self.qty);
+        println!(
+            "  {GREEN}▸{RESET} [{}] Sent {BOLD}NOS{RESET}: {} Buy {} @ 178.55",
+            self.comp_id, self.symbol, self.qty
+        );
 
         Ok(())
     }
 
-    fn on_message(&mut self, msg_type: &[u8], msg: &MessageView<'_>, ctx: &mut EngineContext<'_>) -> io::Result<()> {
+    fn on_message(
+        &mut self,
+        msg_type: &[u8],
+        msg: &MessageView<'_>,
+        ctx: &mut EngineContext<'_>,
+    ) -> io::Result<()> {
         if msg_type == b"8" && !self.done {
             let cum_qty = msg.get_field_i64(tags::CUM_QTY).unwrap_or(0);
-            println!("  {GREEN}▸{RESET} [{}] {BOLD}Fill{RESET}: CumQty={cum_qty} — sending Logout", self.comp_id);
+            println!(
+                "  {GREEN}▸{RESET} [{}] {BOLD}Fill{RESET}: CumQty={cum_qty} — sending Logout",
+                self.comp_id
+            );
             self.done = true;
             ctx.request_stop();
         }
@@ -188,7 +236,10 @@ impl FixApp for TraderApp {
     }
 
     fn on_logout(&mut self) -> io::Result<()> {
-        println!("  {GREEN}▸{RESET} [{}] {BOLD}Logout{RESET} complete", self.comp_id);
+        println!(
+            "  {GREEN}▸{RESET} [{}] {BOLD}Logout{RESET} complete",
+            self.comp_id
+        );
         Ok(())
     }
 }

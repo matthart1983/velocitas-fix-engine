@@ -5,7 +5,6 @@
 ///
 /// This module is gated behind `#[cfg(feature = "dpdk")]` for the actual FFI
 /// calls, but the struct definitions and API compile on all platforms.
-
 use std::io;
 
 use crate::transport::{Transport, TransportEvent};

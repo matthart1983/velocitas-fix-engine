@@ -4,7 +4,6 @@
 /// and clean Logout on both sides.
 ///
 /// Usage: cargo run --release --bin tcp_demo
-
 use std::io;
 use std::net::TcpListener;
 use std::sync::mpsc;
@@ -14,10 +13,10 @@ use std::time::Duration;
 use velocitas_fix::engine::{EngineContext, FixApp, FixEngine};
 use velocitas_fix::message::MessageView;
 use velocitas_fix::serializer;
-use velocitas_fix::transport::Transport;
-use velocitas_fix::session::{Session, SessionConfig, SessionRole, SequenceResetPolicy};
+use velocitas_fix::session::{SequenceResetPolicy, Session, SessionConfig, SessionRole};
 use velocitas_fix::tags;
 use velocitas_fix::timestamp::{HrTimestamp, TimestampSource};
+use velocitas_fix::transport::Transport;
 use velocitas_fix::transport::TransportConfig;
 use velocitas_fix::transport_tcp::StdTcpTransport;
 
@@ -30,9 +29,15 @@ const RESET: &str = "\x1b[0m";
 
 fn main() {
     println!();
-    println!("{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}");
-    println!("{BOLD}{CYAN}║         ⚡  VELOCITAS FIX ENGINE — TCP SESSION DEMO            ║{RESET}");
-    println!("{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}");
+    println!(
+        "{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}"
+    );
+    println!(
+        "{BOLD}{CYAN}║         ⚡  VELOCITAS FIX ENGINE — TCP SESSION DEMO            ║{RESET}"
+    );
+    println!(
+        "{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}"
+    );
     println!();
 
     // Bind acceptor to a random port
@@ -74,7 +79,9 @@ fn run_acceptor(listener: TcpListener, ready_tx: mpsc::Sender<()>) {
     println!("  {GREEN}▸{RESET} Acceptor: connection from {remote}");
 
     // Read the first message (should be Logon)
-    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
     stream.set_nodelay(true).unwrap();
 
     let transport = StdTcpTransport::from_stream(stream, TransportConfig::kernel_tcp())
@@ -101,21 +108,32 @@ fn run_acceptor(listener: TcpListener, ready_tx: mpsc::Sender<()>) {
     let mut app = AcceptorApp;
     // We need to read the first logon manually, then run the engine
     // Actually the engine handles this — we just need to set up the session properly
-    engine.handle_inbound_logon().expect("Failed to handle logon");
+    engine
+        .handle_inbound_logon()
+        .expect("Failed to handle logon");
     println!("  {GREEN}▸{RESET} Acceptor: {BOLD}Logon sent{RESET} (session Active)");
 
-    engine.run_acceptor(&mut app).expect("Acceptor engine error");
+    engine
+        .run_acceptor(&mut app)
+        .expect("Acceptor engine error");
 }
 
 struct AcceptorApp;
 
 impl FixApp for AcceptorApp {
-    fn on_message(&mut self, msg_type: &[u8], msg: &MessageView<'_>, ctx: &mut EngineContext<'_>) -> io::Result<()> {
+    fn on_message(
+        &mut self,
+        msg_type: &[u8],
+        msg: &MessageView<'_>,
+        ctx: &mut EngineContext<'_>,
+    ) -> io::Result<()> {
         match msg_type {
             b"A" => {
                 // Inbound logon from initiator — already handled
-                println!("  {GREEN}▸{RESET} Acceptor: received {BOLD}Logon{RESET} from {}",
-                    msg.sender_comp_id().unwrap_or("?"));
+                println!(
+                    "  {GREEN}▸{RESET} Acceptor: received {BOLD}Logon{RESET} from {}",
+                    msg.sender_comp_id().unwrap_or("?")
+                );
             }
             b"D" => {
                 // NewOrderSingle — respond with ExecutionReport
@@ -155,8 +173,10 @@ impl FixApp for AcceptorApp {
                 println!("  {GREEN}▸{RESET} Acceptor: sent {BOLD}ExecutionReport{RESET} (Fill)");
             }
             _ => {
-                println!("  {DIM}  Acceptor: received MsgType={}{RESET}",
-                    std::str::from_utf8(msg_type).unwrap_or("?"));
+                println!(
+                    "  {DIM}  Acceptor: received MsgType={}{RESET}",
+                    std::str::from_utf8(msg_type).unwrap_or("?")
+                );
             }
         }
         Ok(())
@@ -177,7 +197,9 @@ fn run_initiator(port: u16) {
     thread::sleep(Duration::from_millis(100));
 
     let mut transport = StdTcpTransport::new(TransportConfig::kernel_tcp());
-    transport.connect("127.0.0.1", port).expect("Connect failed");
+    transport
+        .connect("127.0.0.1", port)
+        .expect("Connect failed");
     println!("  {GREEN}▸{RESET} Initiator: connected to 127.0.0.1:{port}");
 
     let session_config = SessionConfig {
@@ -198,7 +220,9 @@ fn run_initiator(port: u16) {
     let mut engine = FixEngine::new_initiator(transport, session);
     let mut app = InitiatorApp { done: false };
 
-    engine.run_initiator(&mut app).expect("Initiator engine error");
+    engine
+        .run_initiator(&mut app)
+        .expect("Initiator engine error");
 }
 
 struct InitiatorApp {
@@ -235,7 +259,12 @@ impl FixApp for InitiatorApp {
         Ok(())
     }
 
-    fn on_message(&mut self, msg_type: &[u8], msg: &MessageView<'_>, ctx: &mut EngineContext<'_>) -> io::Result<()> {
+    fn on_message(
+        &mut self,
+        msg_type: &[u8],
+        msg: &MessageView<'_>,
+        ctx: &mut EngineContext<'_>,
+    ) -> io::Result<()> {
         match msg_type {
             b"8" => {
                 // ExecutionReport received
@@ -251,8 +280,10 @@ impl FixApp for InitiatorApp {
                 }
             }
             _ => {
-                println!("  {DIM}  Initiator: received MsgType={}{RESET}",
-                    std::str::from_utf8(msg_type).unwrap_or("?"));
+                println!(
+                    "  {DIM}  Initiator: received MsgType={}{RESET}",
+                    std::str::from_utf8(msg_type).unwrap_or("?")
+                );
             }
         }
         Ok(())

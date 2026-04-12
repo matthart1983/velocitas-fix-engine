@@ -5,7 +5,6 @@
 /// application-layer FIX version. The application version is negotiated
 /// during Logon via ApplVerID (tag 1128) / DefaultApplVerID (tag 1137),
 /// and multiple application versions can be supported simultaneously.
-
 use crate::message::MessageView;
 use crate::session::{Session, SessionConfig, SessionState};
 
@@ -155,9 +154,7 @@ impl FixtSession {
             .supported_versions
             .contains(&config.default_appl_ver_id)
         {
-            config
-                .supported_versions
-                .push(config.default_appl_ver_id);
+            config.supported_versions.push(config.default_appl_ver_id);
         }
 
         let base = Session::new(config.base.clone());
@@ -236,9 +233,7 @@ impl FixtSession {
                 }
                 Ok(ver)
             }
-            None => self
-                .negotiated_version
-                .ok_or(FixtError::MissingApplVerID),
+            None => self.negotiated_version.ok_or(FixtError::MissingApplVerID),
         }
     }
 
@@ -361,7 +356,7 @@ impl FixtSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::{SessionConfig, SessionRole, SessionState, SequenceResetPolicy};
+    use crate::session::{SequenceResetPolicy, SessionConfig, SessionRole, SessionState};
     use crate::tags;
     use std::time::Duration;
 
@@ -463,10 +458,13 @@ mod tests {
         // Simulate inbound Logon with DefaultApplVerID=9 (FIX.5.0SP2)
         //   "A\x019\x01"  — MsgType at offset 0 len 1, DefaultApplVerID at offset 2 len 1
         let buf = b"A\x019\x01";
-        let view = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),       // "A"
-            (DEFAULT_APPL_VER_ID, 2, 1),  // "9"
-        ]);
+        let view = build_msg(
+            buf,
+            &[
+                (tags::MSG_TYPE, 0, 1),      // "A"
+                (DEFAULT_APPL_VER_ID, 2, 1), // "9"
+            ],
+        );
 
         let result = session.on_logon_received(&view);
         assert!(result.is_ok());
@@ -480,10 +478,7 @@ mod tests {
         session.on_connected();
 
         let buf = b"A\x017\x01";
-        let view = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (DEFAULT_APPL_VER_ID, 2, 1),
-        ]);
+        let view = build_msg(buf, &[(tags::MSG_TYPE, 0, 1), (DEFAULT_APPL_VER_ID, 2, 1)]);
 
         let result = session.on_logon_received(&view);
         assert!(result.is_ok());
@@ -497,10 +492,7 @@ mod tests {
 
         // DefaultApplVerID = "4" → FIX.4.2, which is not in supported_versions
         let buf = b"A\x014\x01";
-        let view = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (DEFAULT_APPL_VER_ID, 2, 1),
-        ]);
+        let view = build_msg(buf, &[(tags::MSG_TYPE, 0, 1), (DEFAULT_APPL_VER_ID, 2, 1)]);
 
         let result = session.on_logon_received(&view);
         assert_eq!(result, Err(FixtError::UnsupportedApplVerID(b"4".to_vec())));
@@ -525,10 +517,7 @@ mod tests {
         session.on_connected();
 
         let buf = b"A\x01X\x01";
-        let view = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (DEFAULT_APPL_VER_ID, 2, 1),
-        ]);
+        let view = build_msg(buf, &[(tags::MSG_TYPE, 0, 1), (DEFAULT_APPL_VER_ID, 2, 1)]);
 
         let result = session.on_logon_received(&view);
         assert_eq!(result, Err(FixtError::InvalidApplVerID(b"X".to_vec())));
@@ -555,10 +544,7 @@ mod tests {
 
         // Negotiate first
         let buf = b"A\x019\x01";
-        let logon = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (DEFAULT_APPL_VER_ID, 2, 1),
-        ]);
+        let logon = build_msg(buf, &[(tags::MSG_TYPE, 0, 1), (DEFAULT_APPL_VER_ID, 2, 1)]);
         session.on_logon_received(&logon).unwrap();
 
         // Session-level Heartbeat — no ApplVerID required, always valid
@@ -574,10 +560,7 @@ mod tests {
         session.on_connected();
 
         let buf = b"A\x019\x01";
-        let logon = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (DEFAULT_APPL_VER_ID, 2, 1),
-        ]);
+        let logon = build_msg(buf, &[(tags::MSG_TYPE, 0, 1), (DEFAULT_APPL_VER_ID, 2, 1)]);
         session.on_logon_received(&logon).unwrap();
 
         // Application-level NewOrderSingle without explicit ApplVerID → uses default
@@ -593,18 +576,12 @@ mod tests {
         session.on_connected();
 
         let buf = b"A\x019\x01";
-        let logon = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (DEFAULT_APPL_VER_ID, 2, 1),
-        ]);
+        let logon = build_msg(buf, &[(tags::MSG_TYPE, 0, 1), (DEFAULT_APPL_VER_ID, 2, 1)]);
         session.on_logon_received(&logon).unwrap();
 
         // NewOrderSingle with explicit ApplVerID = "7" (FIX.5.0)
         let nos_buf = b"D\x017\x01";
-        let nos = build_msg(nos_buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (APPL_VER_ID, 2, 1),
-        ]);
+        let nos = build_msg(nos_buf, &[(tags::MSG_TYPE, 0, 1), (APPL_VER_ID, 2, 1)]);
         let result = session.validate_appl_ver(&nos);
         assert_eq!(result, Ok(ApplVerID::Fix50));
     }
@@ -615,18 +592,12 @@ mod tests {
         session.on_connected();
 
         let buf = b"A\x019\x01";
-        let logon = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (DEFAULT_APPL_VER_ID, 2, 1),
-        ]);
+        let logon = build_msg(buf, &[(tags::MSG_TYPE, 0, 1), (DEFAULT_APPL_VER_ID, 2, 1)]);
         session.on_logon_received(&logon).unwrap();
 
         // NewOrderSingle with ApplVerID = "4" (FIX.4.2, not supported)
         let nos_buf = b"D\x014\x01";
-        let nos = build_msg(nos_buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (APPL_VER_ID, 2, 1),
-        ]);
+        let nos = build_msg(nos_buf, &[(tags::MSG_TYPE, 0, 1), (APPL_VER_ID, 2, 1)]);
         let result = session.validate_appl_ver(&nos);
         assert_eq!(result, Err(FixtError::UnsupportedApplVerID(b"4".to_vec())));
     }
@@ -646,10 +617,7 @@ mod tests {
 
         // 3. Logon with version negotiation
         let buf = b"A\x019\x01";
-        let logon = build_msg(buf, &[
-            (tags::MSG_TYPE, 0, 1),
-            (DEFAULT_APPL_VER_ID, 2, 1),
-        ]);
+        let logon = build_msg(buf, &[(tags::MSG_TYPE, 0, 1), (DEFAULT_APPL_VER_ID, 2, 1)]);
         session.on_logon_received(&logon).unwrap();
         assert_eq!(session.state(), SessionState::Active);
         assert_eq!(session.negotiated_version(), Some(ApplVerID::Fix50SP2));

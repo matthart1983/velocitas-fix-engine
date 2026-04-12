@@ -6,7 +6,6 @@
 /// ║  FIXT 1.1, metrics, cluster HA, dictionary, acceptor,              ║
 /// ║  timestamps, journal, pool, and dashboard.                         ║
 /// ╚══════════════════════════════════════════════════════════════════════╝
-
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -15,14 +14,12 @@ use velocitas_fix::cluster::{ClusterConfig, ClusterNode, NodeId, ReplicatedSessi
 use velocitas_fix::dashboard::{Dashboard, DashboardConfig, HealthStatus, SessionStatus};
 use velocitas_fix::dict_compiler::{CompiledDictionary, TEST_DICTIONARY_XML};
 use velocitas_fix::fixt::{ApplVerID, FixtSession, FixtSessionConfig};
-use velocitas_fix::journal::{Journal, SyncPolicy, session_hash};
+use velocitas_fix::journal::{session_hash, Journal, SyncPolicy};
 use velocitas_fix::metrics::EngineMetrics;
 use velocitas_fix::parser::FixParser;
 use velocitas_fix::pool::BufferPool;
 use velocitas_fix::serializer;
-use velocitas_fix::session::{
-    Session, SessionConfig, SessionRole, SequenceResetPolicy,
-};
+use velocitas_fix::session::{SequenceResetPolicy, Session, SessionConfig, SessionRole};
 use velocitas_fix::simd;
 use velocitas_fix::tags;
 use velocitas_fix::timestamp::{HrClock, HrTimestamp, LatencyTracker, TimestampSource};
@@ -70,10 +67,19 @@ fn pause() {
 
 fn main() {
     println!();
-    println!("{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}");
-    println!("{BOLD}{CYAN}║              ⚡  VELOCITAS FIX ENGINE  v{}               ║{RESET}", env!("CARGO_PKG_VERSION"));
-    println!("{BOLD}{CYAN}║          High-Performance FIX Protocol Engine Demo              ║{RESET}");
-    println!("{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}");
+    println!(
+        "{BOLD}{CYAN}╔══════════════════════════════════════════════════════════════════╗{RESET}"
+    );
+    println!(
+        "{BOLD}{CYAN}║              ⚡  VELOCITAS FIX ENGINE  v{}               ║{RESET}",
+        env!("CARGO_PKG_VERSION")
+    );
+    println!(
+        "{BOLD}{CYAN}║          High-Performance FIX Protocol Engine Demo              ║{RESET}"
+    );
+    println!(
+        "{BOLD}{CYAN}╚══════════════════════════════════════════════════════════════════╝{RESET}"
+    );
 
     pause();
     demo_parse_serialize();
@@ -137,7 +143,13 @@ fn demo_parse_serialize() {
         b"178.55",
     );
     result("Message size", &format!("{len} bytes"));
-    result("Wire format", &format!("{}", String::from_utf8_lossy(&buf[..len]).replace('\x01', "|")));
+    result(
+        "Wire format",
+        &format!(
+            "{}",
+            String::from_utf8_lossy(&buf[..len]).replace('\x01', "|")
+        ),
+    );
 
     // --- Parse it back ---
     step("Parsing message back (zero-copy flyweight)");
@@ -150,8 +162,17 @@ fn demo_parse_serialize() {
     result("TargetCompID", view.target_comp_id().unwrap());
     result("ClOrdID", view.get_field_str(tags::CL_ORD_ID).unwrap());
     result("Symbol", view.get_field_str(tags::SYMBOL).unwrap());
-    result("Side", &format!("{:?}", velocitas_fix::Side::from_byte(view.get_field(tags::SIDE).unwrap()[0]).unwrap()));
-    result("OrderQty", &format!("{}", view.get_field_i64(tags::ORDER_QTY).unwrap()));
+    result(
+        "Side",
+        &format!(
+            "{:?}",
+            velocitas_fix::Side::from_byte(view.get_field(tags::SIDE).unwrap()[0]).unwrap()
+        ),
+    );
+    result(
+        "OrderQty",
+        &format!("{}", view.get_field_i64(tags::ORDER_QTY).unwrap()),
+    );
     result("Price", view.get_field_str(tags::PRICE).unwrap());
     result("Checksum valid", &format!("{}", view.is_checksum_valid()));
     result("Field count", &format!("{}", view.field_count()));
@@ -183,10 +204,25 @@ fn demo_parse_serialize() {
     );
     let (rsp_view, _) = parser.parse(&rsp_buf[..rsp_len]).unwrap();
     result("ExecRpt size", &format!("{rsp_len} bytes"));
-    result("ExecType", &format!("Fill ({})", rsp_view.get_field_str(tags::EXEC_TYPE).unwrap()));
-    result("LastQty", &format!("{}", rsp_view.get_field_i64(tags::LAST_QTY).unwrap()));
-    result("CumQty", &format!("{}", rsp_view.get_field_i64(tags::CUM_QTY).unwrap()));
-    result("LeavesQty", &format!("{}", rsp_view.get_field_i64(tags::LEAVES_QTY).unwrap()));
+    result(
+        "ExecType",
+        &format!(
+            "Fill ({})",
+            rsp_view.get_field_str(tags::EXEC_TYPE).unwrap()
+        ),
+    );
+    result(
+        "LastQty",
+        &format!("{}", rsp_view.get_field_i64(tags::LAST_QTY).unwrap()),
+    );
+    result(
+        "CumQty",
+        &format!("{}", rsp_view.get_field_i64(tags::CUM_QTY).unwrap()),
+    );
+    result(
+        "LeavesQty",
+        &format!("{}", rsp_view.get_field_i64(tags::LEAVES_QTY).unwrap()),
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -227,18 +263,27 @@ fn demo_session_lifecycle() {
     for _ in 0..100 {
         let _seq = session.next_outbound_seq_num();
     }
-    result("Outbound seq", &format!("{}", session.current_outbound_seq_num()));
+    result(
+        "Outbound seq",
+        &format!("{}", session.current_outbound_seq_num()),
+    );
 
     step("Inbound sequence validation (1..50)");
     for i in 1..=50 {
         session.validate_inbound_seq(i).unwrap();
     }
-    result("Expected inbound seq", &format!("{}", session.expected_inbound_seq_num()));
+    result(
+        "Expected inbound seq",
+        &format!("{}", session.expected_inbound_seq_num()),
+    );
 
     step("Gap detection: received seq 55, expected 51");
     let gap = session.validate_inbound_seq(55);
     result("Gap detected", &format!("{:?}", gap.unwrap_err()));
-    result("State", &format!("{:?} (awaiting gap fill)", session.state()));
+    result(
+        "State",
+        &format!("{:?} (awaiting gap fill)", session.state()),
+    );
 
     step("Gap filled → Active");
     session.on_gap_filled(55);
@@ -249,7 +294,14 @@ fn demo_session_lifecycle() {
     result("State", &format!("{:?}", session.state()));
     session.on_disconnected();
     result("State", &format!("{:?}", session.state()));
-    result("Sequences preserved", &format!("outbound={}, inbound={}", session.current_outbound_seq_num(), session.expected_inbound_seq_num()));
+    result(
+        "Sequences preserved",
+        &format!(
+            "outbound={}, inbound={}",
+            session.current_outbound_seq_num(),
+            session.expected_inbound_seq_num()
+        ),
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -286,8 +338,18 @@ fn demo_throughput_benchmark() {
     let start = Instant::now();
     for i in 0..1_000_000u64 {
         let _ = serializer::build_new_order_single(
-            &mut ser_buf, b"FIX.4.4", b"S", b"T", i,
-            b"20260321-10:00:00", b"O1", b"AAPL", b'1', 100, b'2', b"150.00",
+            &mut ser_buf,
+            b"FIX.4.4",
+            b"S",
+            b"T",
+            i,
+            b"20260321-10:00:00",
+            b"O1",
+            b"AAPL",
+            b'1',
+            100,
+            b'2',
+            b"150.00",
         );
     }
     let elapsed = start.elapsed();
@@ -306,7 +368,11 @@ fn demo_throughput_benchmark() {
     let elapsed = start.elapsed();
     let parse_rate = 1_000_000.0 / elapsed.as_secs_f64();
     let parse_ns = elapsed.as_nanos() as f64 / 1_000_000.0;
-    metric("Parse rate (unchecked)", &format!("{parse_rate:.0}"), "msg/s");
+    metric(
+        "Parse rate (unchecked)",
+        &format!("{parse_rate:.0}"),
+        "msg/s",
+    );
     metric("Parse latency", &format!("{parse_ns:.1}"), "ns/msg");
 
     // --- Parse benchmark (validated) ---
@@ -318,7 +384,11 @@ fn demo_throughput_benchmark() {
     let elapsed = start.elapsed();
     let checked_rate = 1_000_000.0 / elapsed.as_secs_f64();
     let checked_ns = elapsed.as_nanos() as f64 / 1_000_000.0;
-    metric("Parse rate (validated)", &format!("{checked_rate:.0}"), "msg/s");
+    metric(
+        "Parse rate (validated)",
+        &format!("{checked_rate:.0}"),
+        "msg/s",
+    );
     metric("Parse latency", &format!("{checked_ns:.1}"), "ns/msg");
 
     // --- Parse + Respond roundtrip ---
@@ -329,21 +399,43 @@ fn demo_throughput_benchmark() {
     for _ in 0..1_000_000 {
         let (view, _) = parser_unchecked.parse(msg).unwrap();
         let _ = serializer::build_execution_report(
-            &mut out_buf, b"FIX.4.4", b"E", b"B", 1, b"20260321-10:00:00",
-            b"O1", b"X1",
+            &mut out_buf,
+            b"FIX.4.4",
+            b"E",
+            b"B",
+            1,
+            b"20260321-10:00:00",
+            b"O1",
+            b"X1",
             view.get_field(tags::CL_ORD_ID).unwrap_or(b"?"),
             view.get_field(tags::SYMBOL).unwrap_or(b"?"),
-            b'1', 100, 100, b"150.00", 0, 100, b"150.00", b'2', b'2',
+            b'1',
+            100,
+            100,
+            b"150.00",
+            0,
+            100,
+            b"150.00",
+            b'2',
+            b'2',
         );
     }
     let elapsed = start.elapsed();
     let rt_rate = 1_000_000.0 / elapsed.as_secs_f64();
     metric("Roundtrip rate", &format!("{rt_rate:.0}"), "msg/s");
-    metric("Roundtrip latency", &format!("{:.1}", elapsed.as_nanos() as f64 / 1_000_000.0), "ns/msg");
+    metric(
+        "Roundtrip latency",
+        &format!("{:.1}", elapsed.as_nanos() as f64 / 1_000_000.0),
+        "ns/msg",
+    );
 
     separator();
     result("Target", "≥ 2,000,000 msg/s");
-    let status = if parse_rate >= 2_000_000.0 { "✅ PASS" } else { "⚠️  BELOW TARGET (debug build)" };
+    let status = if parse_rate >= 2_000_000.0 {
+        "✅ PASS"
+    } else {
+        "⚠️  BELOW TARGET (debug build)"
+    };
     result("Status", status);
 }
 
@@ -354,7 +446,8 @@ fn demo_throughput_benchmark() {
 fn demo_simd_scanning() {
     header("4. SIMD-ACCELERATED DELIMITER SCANNING");
 
-    let sample = b"8=FIX.4.4\x019=70\x0135=D\x0149=BANK\x0156=NYSE\x0134=1\x0155=AAPL\x0110=000\x01";
+    let sample =
+        b"8=FIX.4.4\x019=70\x0135=D\x0149=BANK\x0156=NYSE\x0134=1\x0155=AAPL\x0110=000\x01";
 
     step("SIMD SOH (0x01) scanning");
     let first_soh = simd::find_soh(sample);
@@ -383,7 +476,11 @@ fn demo_simd_scanning() {
     }
     let elapsed = start.elapsed();
     metric("Time", &format!("{:.1}", elapsed.as_millis()), "ms");
-    metric("Rate", &format!("{:.0}", 10_000_000.0 / elapsed.as_secs_f64()), "scans/s");
+    metric(
+        "Rate",
+        &format!("{:.0}", 10_000_000.0 / elapsed.as_secs_f64()),
+        "scans/s",
+    );
     let _ = total; // prevent optimize-away
 }
 
@@ -405,7 +502,10 @@ fn demo_memory_pool() {
     let msg = b"Hello from Velocitas!";
     buf[..msg.len()].copy_from_slice(msg);
     let read_back = std::str::from_utf8(&pool.get(handle)[..msg.len()]).unwrap();
-    result("Written", &format!("{:?}", std::str::from_utf8(msg).unwrap()));
+    result(
+        "Written",
+        &format!("{:?}", std::str::from_utf8(msg).unwrap()),
+    );
     result("Read back", &format!("{:?}", read_back));
     pool.deallocate(handle);
     result("Deallocated", "handle returned to pool");
@@ -419,7 +519,11 @@ fn demo_memory_pool() {
     }
     let elapsed = start.elapsed();
     metric("Time", &format!("{:.1}", elapsed.as_millis()), "ms");
-    metric("Latency", &format!("{:.1}", elapsed.as_nanos() as f64 / 10_000_000.0), "ns/cycle");
+    metric(
+        "Latency",
+        &format!("{:.1}", elapsed.as_nanos() as f64 / 10_000_000.0),
+        "ns/cycle",
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -444,13 +548,22 @@ fn demo_journal() {
     for seq in 1..=10_000u64 {
         let mut buf = [0u8; 256];
         let len = serializer::build_heartbeat(
-            &mut buf, b"FIX.4.4", b"B", b"N", seq, b"20260321-10:00:00",
+            &mut buf,
+            b"FIX.4.4",
+            b"B",
+            b"N",
+            seq,
+            b"20260321-10:00:00",
         );
         journal.append(hash, seq, &buf[..len]).unwrap();
     }
     let elapsed = start.elapsed();
     metric("Write time", &format!("{:.2}", elapsed.as_millis()), "ms");
-    metric("Write rate", &format!("{:.0}", 10_000.0 / elapsed.as_secs_f64()), "msg/s");
+    metric(
+        "Write rate",
+        &format!("{:.0}", 10_000.0 / elapsed.as_secs_f64()),
+        "msg/s",
+    );
     result("Entries written", &format!("{}", journal.entry_count()));
 
     step("Reading back first and last entries");
@@ -458,7 +571,10 @@ fn demo_journal() {
     let parser = FixParser::new();
     let (view, _) = parser.parse(body).unwrap();
     result("Entry 0 seq", &format!("{}", hdr.seq_num));
-    result("Entry 0 type", &format!("{:?}", view.msg_type_enum().unwrap()));
+    result(
+        "Entry 0 type",
+        &format!("{:?}", view.msg_type_enum().unwrap()),
+    );
     result("CRC32 valid", "✓");
 
     let _ = std::fs::remove_file(&path);
@@ -497,13 +613,23 @@ fn demo_fixt_session() {
     result("State", &format!("{:?}", session.state()));
     session.on_logon();
     result("State", &format!("{:?}", session.state()));
-    result("Negotiated version", &format!("{:?}", session.negotiated_version().unwrap_or(ApplVerID::Fix50SP2)));
+    result(
+        "Negotiated version",
+        &format!(
+            "{:?}",
+            session.negotiated_version().unwrap_or(ApplVerID::Fix50SP2)
+        ),
+    );
 
     step("ApplVerID conversions");
     for ver in &[ApplVerID::Fix42, ApplVerID::Fix44, ApplVerID::Fix50SP2] {
         result(
             &format!("{:?}", ver),
-            &format!("wire={:?}  version={}", std::str::from_utf8(ver.as_bytes()).unwrap(), ver.as_fix_version_str()),
+            &format!(
+                "wire={:?}  version={}",
+                std::str::from_utf8(ver.as_bytes()).unwrap(),
+                ver.as_fix_version_str()
+            ),
         );
     }
 }
@@ -524,7 +650,10 @@ fn demo_dictionary_compiler() {
     step("O(1) field lookup by tag number");
     for tag in &[8, 35, 49, 54, 55] {
         let f = dict.lookup_field(*tag).unwrap();
-        result(&format!("Tag {tag}"), &format!("{} ({})", f.name, f.field_type));
+        result(
+            &format!("Tag {tag}"),
+            &format!("{} ({})", f.name, f.field_type),
+        );
     }
 
     step("Field with enum values");
@@ -565,16 +694,34 @@ fn demo_repeating_groups() {
     step("  (NoMDEntries=3, each with MDEntryType, MDEntryPx, MDEntrySize)");
 
     let group_def = velocitas_fix::groups::md_entries_group();
-    result("Group definition", &format!("count_tag={}, delimiter_tag={}", group_def.count_tag, group_def.delimiter_tag));
+    result(
+        "Group definition",
+        &format!(
+            "count_tag={}, delimiter_tag={}",
+            group_def.count_tag, group_def.delimiter_tag
+        ),
+    );
     result("Member tags", &format!("{:?}", group_def.member_tags));
 
     // Show available predefined groups
     separator();
     step("Pre-defined group definitions");
     let legs = velocitas_fix::groups::legs_group();
-    result("NoLegs(555)", &format!("delimiter={}, members={:?}", legs.delimiter_tag, legs.member_tags));
+    result(
+        "NoLegs(555)",
+        &format!(
+            "delimiter={}, members={:?}",
+            legs.delimiter_tag, legs.member_tags
+        ),
+    );
     let fills = velocitas_fix::groups::fills_group();
-    result("NoFills(1362)", &format!("delimiter={}, members={:?}", fills.delimiter_tag, fills.member_tags));
+    result(
+        "NoFills(1362)",
+        &format!(
+            "delimiter={}, members={:?}",
+            fills.delimiter_tag, fills.member_tags
+        ),
+    );
     result("Nested groups", "Supported to arbitrary depth");
 }
 
@@ -598,11 +745,23 @@ fn demo_metrics() {
         metrics.parse_latency_ns.record(*ns);
     }
 
-    result("messages_parsed", &format!("{}", metrics.messages_parsed.get()));
+    result(
+        "messages_parsed",
+        &format!("{}", metrics.messages_parsed.get()),
+    );
     result("messages_sent", &format!("{}", metrics.messages_sent.get()));
-    result("active_sessions", &format!("{}", metrics.active_sessions.get()));
-    result("parse_latency p50", &format!("{} ns", metrics.parse_latency_ns.percentile(50.0)));
-    result("parse_latency p99", &format!("{} ns", metrics.parse_latency_ns.percentile(99.0)));
+    result(
+        "active_sessions",
+        &format!("{}", metrics.active_sessions.get()),
+    );
+    result(
+        "parse_latency p50",
+        &format!("{} ns", metrics.parse_latency_ns.percentile(50.0)),
+    );
+    result(
+        "parse_latency p99",
+        &format!("{} ns", metrics.parse_latency_ns.percentile(99.0)),
+    );
 
     separator();
     step("Prometheus exposition format (first 15 lines)");
@@ -622,8 +781,16 @@ fn demo_cluster_ha() {
 
     step("Creating 3-node cluster");
     let peers = vec![
-        NodeId { id: 2, address: "10.0.1.2".into(), port: 9002 },
-        NodeId { id: 3, address: "10.0.1.3".into(), port: 9003 },
+        NodeId {
+            id: 2,
+            address: "10.0.1.2".into(),
+            port: 9002,
+        },
+        NodeId {
+            id: 3,
+            address: "10.0.1.3".into(),
+            port: 9003,
+        },
     ];
     let mut node = ClusterNode::new(ClusterConfig::three_node(1, peers));
     result("Node ID", "1");
@@ -692,9 +859,15 @@ fn demo_acceptor() {
     result("Whitelist", "CITADEL, JPMORGAN, GOLDMAN");
 
     step("Accepting connections");
-    let c1 = acceptor.accept_connection("10.0.1.100", "CITADEL", 1000).unwrap();
-    let c2 = acceptor.accept_connection("10.0.1.101", "JPMORGAN", 1001).unwrap();
-    let c3 = acceptor.accept_connection("10.0.1.102", "GOLDMAN", 1002).unwrap();
+    let c1 = acceptor
+        .accept_connection("10.0.1.100", "CITADEL", 1000)
+        .unwrap();
+    let c2 = acceptor
+        .accept_connection("10.0.1.101", "JPMORGAN", 1001)
+        .unwrap();
+    let c3 = acceptor
+        .accept_connection("10.0.1.102", "GOLDMAN", 1002)
+        .unwrap();
     result("Connection 1", &format!("id={c1} comp_id=CITADEL"));
     result("Connection 2", &format!("id={c2} comp_id=JPMORGAN"));
     result("Connection 3", &format!("id={c3} comp_id=GOLDMAN"));
@@ -732,7 +905,10 @@ fn demo_timestamps() {
     let fix_ns = ts.to_fix_timestamp_ns();
     result("Millisecond", std::str::from_utf8(&fix_ms).unwrap());
     result("Microsecond", std::str::from_utf8(&fix_us).unwrap());
-    result("Nanosecond (MiFID II)", std::str::from_utf8(&fix_ns).unwrap());
+    result(
+        "Nanosecond (MiFID II)",
+        std::str::from_utf8(&fix_ns).unwrap(),
+    );
 
     step("TSC (CPU timestamp counter)");
     let clock = HrClock::new(TimestampSource::System);
@@ -762,7 +938,11 @@ fn demo_timestamps() {
     }
     let elapsed = start.elapsed();
     metric("Time", &format!("{:.1}", elapsed.as_millis()), "ms");
-    metric("Latency", &format!("{:.1}", elapsed.as_nanos() as f64 / 10_000_000.0), "ns/read");
+    metric(
+        "Latency",
+        &format!("{:.1}", elapsed.as_nanos() as f64 / 10_000_000.0),
+        "ns/read",
+    );
     let _ = last;
 }
 
@@ -800,7 +980,10 @@ fn demo_dashboard() {
         last_activity_ms: 1711008000000,
         uptime_secs: 28800,
     });
-    result("Sessions registered", &format!("{}", dashboard.session_count()));
+    result(
+        "Sessions registered",
+        &format!("{}", dashboard.session_count()),
+    );
 
     step("Updating health status");
     dashboard.update_health(HealthStatus {

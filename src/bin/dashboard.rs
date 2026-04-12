@@ -7,7 +7,6 @@
 ///   /sessions — JSON session list
 ///
 /// Usage: cargo run --release --bin dashboard [-- --port 8080]
-
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::time::Instant;

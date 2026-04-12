@@ -2,8 +2,7 @@
 ///
 /// Manages inbound connections, enforces CompID whitelisting, and maintains
 /// a pre-allocated pool of reusable connection slots for low-latency accept.
-
-use crate::session::{Session, SessionConfig, SessionRole, SequenceResetPolicy};
+use crate::session::{SequenceResetPolicy, Session, SessionConfig, SessionRole};
 use std::fmt;
 use std::time::Duration;
 
@@ -61,7 +60,13 @@ impl fmt::Debug for PooledConnection {
         f.debug_struct("PooledConnection")
             .field("id", &self.id)
             .field("state", &self.state)
-            .field("session", &self.session.as_ref().map(|s| s.config().session_id.as_str()))
+            .field(
+                "session",
+                &self
+                    .session
+                    .as_ref()
+                    .map(|s| s.config().session_id.as_str()),
+            )
             .field("remote_comp_id", &self.remote_comp_id)
             .field("remote_address", &self.remote_address)
             .field("connected_at_ms", &self.connected_at_ms)

@@ -303,7 +303,9 @@ impl ClusterNode {
 
     /// Look up a replicated session state by session ID.
     pub fn get_session_state(&self, session_id: &str) -> Option<&ReplicatedSessionState> {
-        self.session_states.iter().find(|s| s.session_id == session_id)
+        self.session_states
+            .iter()
+            .find(|s| s.session_id == session_id)
     }
 
     /// Create a snapshot of the current session states.
@@ -387,7 +389,9 @@ fn decode_session_state(data: &[u8]) -> Option<ReplicatedSessionState> {
         if *offset + len > data.len() {
             return None;
         }
-        let s = std::str::from_utf8(&data[*offset..*offset + len]).ok()?.to_string();
+        let s = std::str::from_utf8(&data[*offset..*offset + len])
+            .ok()?
+            .to_string();
         *offset += len;
         Some(s)
     };
@@ -643,14 +647,20 @@ mod tests {
         let entry = node.log[0].clone();
         node.apply_log_entry(&entry);
 
-        assert_eq!(node.get_session_state("FIX-1").unwrap().outbound_seq_num, 10);
+        assert_eq!(
+            node.get_session_state("FIX-1").unwrap().outbound_seq_num,
+            10
+        );
 
         // Update the same session.
         node.replicate_session_state(make_session_state("FIX-1", 42, 30));
         let entry = node.log[1].clone();
         node.apply_log_entry(&entry);
 
-        assert_eq!(node.get_session_state("FIX-1").unwrap().outbound_seq_num, 42);
+        assert_eq!(
+            node.get_session_state("FIX-1").unwrap().outbound_seq_num,
+            42
+        );
         assert_eq!(node.get_session_state("FIX-1").unwrap().inbound_seq_num, 30);
         // Should still be only one entry, not two.
         assert_eq!(node.session_states.len(), 1);

@@ -129,9 +129,11 @@ impl CompiledDictionary {
     }
 
     fn parse_version(xml: &str) -> Result<String, DictError> {
-        let fix_start = xml.find("<fix ")
+        let fix_start = xml
+            .find("<fix ")
             .ok_or_else(|| DictError::ParseError("no <fix> tag found".into()))?;
-        let fix_end = xml[fix_start..].find('>')
+        let fix_end = xml[fix_start..]
+            .find('>')
             .ok_or_else(|| DictError::ParseError("unclosed <fix> tag".into()))?;
         let fix_tag = &xml[fix_start..fix_start + fix_end + 1];
 
@@ -148,7 +150,8 @@ impl CompiledDictionary {
             Some(pos) => pos,
             None => return Ok(Vec::new()),
         };
-        let fields_end = xml[fields_start..].find("</fields>")
+        let fields_end = xml[fields_start..]
+            .find("</fields>")
             .ok_or_else(|| DictError::ParseError("unclosed <fields> section".into()))?;
         let fields_section = &xml[fields_start..fields_start + fields_end];
 
@@ -191,8 +194,9 @@ impl CompiledDictionary {
 
             let number_str = extract_attr(tag_str, "number")
                 .ok_or_else(|| DictError::MissingAttribute("field number".into()))?;
-            let tag_num: u32 = number_str.parse()
-                .map_err(|_| DictError::InvalidFormat(format!("invalid field number: {}", number_str)))?;
+            let tag_num: u32 = number_str.parse().map_err(|_| {
+                DictError::InvalidFormat(format!("invalid field number: {}", number_str))
+            })?;
             let name = extract_attr(tag_str, "name")
                 .ok_or_else(|| DictError::MissingAttribute("field name".into()))?;
             let field_type = extract_attr(tag_str, "type")
@@ -226,9 +230,10 @@ impl CompiledDictionary {
             };
             let tag_str = &body[tag_start..tag_end];
 
-            if let (Some(enum_val), Some(desc)) =
-                (extract_attr(tag_str, "enum"), extract_attr(tag_str, "description"))
-            {
+            if let (Some(enum_val), Some(desc)) = (
+                extract_attr(tag_str, "enum"),
+                extract_attr(tag_str, "description"),
+            ) {
                 values.push((enum_val, desc));
             }
 
@@ -246,7 +251,8 @@ impl CompiledDictionary {
             Some(pos) => pos,
             None => return Ok(Vec::new()),
         };
-        let msgs_end = xml[msgs_start..].find("</messages>")
+        let msgs_end = xml[msgs_start..]
+            .find("</messages>")
             .ok_or_else(|| DictError::ParseError("unclosed <messages> section".into()))?;
         let msgs_section = &xml[msgs_start..msgs_start + msgs_end];
 

@@ -4,7 +4,6 @@
 /// histogram behind a `Mutex` (only acquired on reads / resets, never on the
 /// recording hot-path — `record()` still takes the lock briefly, but HDR
 /// histogram recording is O(1) and sub-microsecond).
-
 use std::fmt::Write as FmtWrite;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -234,13 +233,7 @@ impl LatencyHistogram {
 
         for &q in &[50.0, 90.0, 99.0, 99.9] {
             let v = h.value_at_percentile(q);
-            let _ = writeln!(
-                out,
-                "{}{{quantile=\"{}\"}} {}",
-                self.name,
-                q / 100.0,
-                v,
-            );
+            let _ = writeln!(out, "{}{{quantile=\"{}\"}} {}", self.name, q / 100.0, v,);
         }
 
         let count = h.len();
@@ -326,10 +319,7 @@ impl EngineMetrics {
                 "velocitas_messages_parsed_total",
                 "Total FIX messages parsed",
             ),
-            messages_sent: Counter::new(
-                "velocitas_messages_sent_total",
-                "Total FIX messages sent",
-            ),
+            messages_sent: Counter::new("velocitas_messages_sent_total", "Total FIX messages sent"),
             messages_rejected: Counter::new(
                 "velocitas_messages_rejected_total",
                 "Total FIX messages rejected",
@@ -675,7 +665,11 @@ mod tests {
 
     #[test]
     fn thread_safety_histogram() {
-        let hist = Arc::new(LatencyHistogram::new("threaded_hist", "thread hist test", 1_000_000));
+        let hist = Arc::new(LatencyHistogram::new(
+            "threaded_hist",
+            "thread hist test",
+            1_000_000,
+        ));
         let num_threads = 4;
         let records_per_thread = 1_000;
 

@@ -3,7 +3,6 @@
 /// FIX repeating groups are defined by a "NumInGroup" count tag followed by
 /// that many repetitions of a fixed set of fields. Each repetition starts
 /// with the same delimiter tag. Groups can be nested.
-
 use crate::message::FieldEntry;
 
 /// Definition of a repeating group's structure.
@@ -177,10 +176,7 @@ impl<'a> GroupEntry<'a> {
     /// Get a field value by tag.
     #[inline]
     pub fn get_field(&self, tag: u32) -> Option<&'a [u8]> {
-        self.fields
-            .iter()
-            .find(|(t, _)| *t == tag)
-            .map(|(_, v)| *v)
+        self.fields.iter().find(|(t, _)| *t == tag).map(|(_, v)| *v)
     }
 
     /// Get a field value as `&str`.
@@ -349,8 +345,7 @@ mod tests {
 
         let view = build_view(msg);
         let def = md_entries_group().with_nested(legs_group());
-        let (group, next_idx) =
-            RepeatingGroup::parse(msg, view.fields(), 0, &def).unwrap();
+        let (group, next_idx) = RepeatingGroup::parse(msg, view.fields(), 0, &def).unwrap();
 
         assert_eq!(group.count(), 2);
         assert_eq!(next_idx, view.field_count());
@@ -473,11 +468,13 @@ mod tests {
         let view = build_view(msg);
         let def = md_entries_group();
         // Count tag is at field index 3 (after 35, 49, 56)
-        let (group, next_idx) =
-            RepeatingGroup::parse(msg, view.fields(), 3, &def).unwrap();
+        let (group, next_idx) = RepeatingGroup::parse(msg, view.fields(), 3, &def).unwrap();
 
         assert_eq!(group.count(), 2);
-        assert_eq!(group.get_entry(0).unwrap().get_field_str(270), Some("100.00"));
+        assert_eq!(
+            group.get_entry(0).unwrap().get_field_str(270),
+            Some("100.00")
+        );
         assert_eq!(group.get_entry(1).unwrap().get_field_i64(271), Some(300));
         // next_idx should point to the checksum field (tag 10)
         assert_eq!(view.fields()[next_idx].tag, 10);

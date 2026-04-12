@@ -229,9 +229,7 @@ pub mod encoder {
             self.get_buf_mut().put_u32_at(limit, data_length as u32);
             self.get_buf_mut().put_slice_at(limit + 4, value.as_bytes());
         }
-
     }
-
 } // end encoder
 
 pub mod decoder {
@@ -441,8 +439,5 @@ pub mod decoder {
             debug_assert!(self.get_limit() >= coordinates.0 + coordinates.1);
             self.get_buf().get_slice_at(coordinates.0, coordinates.1)
         }
-
     }
-
 } // end decoder
-

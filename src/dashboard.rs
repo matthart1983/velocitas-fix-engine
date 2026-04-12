@@ -2,7 +2,6 @@
 ///
 /// Serves real-time metrics, session status, and health checks via HTTP.
 /// No external dependencies — generates JSON and HTML by hand.
-
 use std::fmt::Write;
 
 // ---------------------------------------------------------------------------
@@ -234,7 +233,11 @@ impl Dashboard {
         let mut out = String::with_capacity(256);
         out.push('{');
         let _ = write!(out, "\"healthy\":{}", self.health.healthy);
-        let _ = write!(out, ",\"version\":\"{}\"", json_escape(&self.health.version));
+        let _ = write!(
+            out,
+            ",\"version\":\"{}\"",
+            json_escape(&self.health.version)
+        );
         let _ = write!(out, ",\"uptime_secs\":{}", self.health.uptime_secs);
         let _ = write!(out, ",\"active_sessions\":{}", self.health.active_sessions);
         let _ = write!(

@@ -3,7 +3,6 @@
 /// Uses a fixed-size slab allocator with a lock-free free-list (LIFO stack).
 /// All memory is pre-allocated and page-faulted at initialization to avoid
 /// allocation on the hot path.
-
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// A handle to a pooled buffer. Index into the pool's slab array.
@@ -143,9 +142,9 @@ pub struct TieredPool {
 impl TieredPool {
     pub fn new() -> Self {
         TieredPool {
-            small: BufferPool::new(256, 1_048_576),      // 256 MB
-            medium: BufferPool::new(4096, 262_144),      // 1 GB
-            large: BufferPool::new(65_536, 16_384),      // 1 GB
+            small: BufferPool::new(256, 1_048_576), // 256 MB
+            medium: BufferPool::new(4096, 262_144), // 1 GB
+            large: BufferPool::new(65_536, 16_384), // 1 GB
         }
     }
 

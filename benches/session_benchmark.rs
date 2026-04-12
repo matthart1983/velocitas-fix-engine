@@ -1,10 +1,11 @@
 /// BM-06/07: Session Establishment and Gap Fill Benchmarks
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use velocitas_fix::session::{Session, SessionConfig, SessionRole, SessionState, SequenceResetPolicy};
-use velocitas_fix::serializer;
-use velocitas_fix::parser::FixParser;
 use std::time::Duration;
+use velocitas_fix::parser::FixParser;
+use velocitas_fix::serializer;
+use velocitas_fix::session::{
+    SequenceResetPolicy, Session, SessionConfig, SessionRole, SessionState,
+};
 
 fn session_config() -> SessionConfig {
     SessionConfig {

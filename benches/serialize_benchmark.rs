@@ -1,7 +1,6 @@
 /// BM-02: Message Serialization Latency Benchmark
 ///
 /// Measures the time to build and serialize FIX messages from field values.
-
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use velocitas_fix::serializer;
 

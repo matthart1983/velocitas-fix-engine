@@ -10,6 +10,14 @@ repositories {
 dependencies {
     implementation 'org.quickfixj:quickfixj-core:2.3.1'
     implementation 'org.quickfixj:quickfixj-messages-fix44:2.3.1'
+    implementation 'io.aeron:aeron-all:1.50.4'
+
+    // Artio (Real Logic) — Aeron-native Java FIX engine.
+    implementation 'uk.co.real-logic:artio-core:0.176'
+    implementation 'uk.co.real-logic:artio-codecs:0.176'
+    implementation 'uk.co.real-logic:artio-session-codecs:0.176'
+    implementation 'io.aeron:aeron-archive:1.50.4'
+    implementation 'org.slf4j:slf4j-nop:2.0.13'
 }
 
 application {
@@ -29,4 +37,30 @@ tasks.register('runTcp', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'TcpBenchmark'
     jvmArgs = ['-server', '-XX:+UseG1GC', '-Xms512m', '-Xmx512m']
+}
+
+tasks.register('runE2E', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'AeronRoundTripBenchmark'
+    jvmArgs = [
+        '-server', '-XX:+UseG1GC', '-Xms512m', '-Xmx512m',
+        '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+        '--add-opens=java.base/java.nio=ALL-UNNAMED',
+        '--add-opens=java.base/java.util.zip=ALL-UNNAMED',
+        '--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED',
+    ]
+}
+
+tasks.register('runArtio', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ArtioRoundTripBenchmark'
+    jvmArgs = [
+        '-server', '-XX:+UseG1GC', '-Xms1g', '-Xmx1g',
+        '-Dfix.codecs.no_validation=true',
+        '-Dagrona.disable.bounds.checks=true',
+        '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+        '--add-opens=java.base/java.nio=ALL-UNNAMED',
+        '--add-opens=java.base/java.util.zip=ALL-UNNAMED',
+        '--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED',
+    ]
 }

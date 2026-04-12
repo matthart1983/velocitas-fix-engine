@@ -1,16 +1,17 @@
+use std::time::Duration;
+use velocitas_fix::journal::{session_hash, Journal, SyncPolicy};
+use velocitas_fix::parser::{FixParser, ParseError};
+use velocitas_fix::pool::BufferPool;
+use velocitas_fix::serializer;
+use velocitas_fix::session::{
+    SequenceResetPolicy, Session, SessionConfig, SessionRole, SessionState,
+};
+use velocitas_fix::tags;
 /// Integration tests for the Velocitas FIX Engine.
 ///
 /// These tests validate end-to-end behavior across parser, serializer,
 /// session management, journal, and pool components.
-
 use velocitas_fix::*;
-use velocitas_fix::parser::{FixParser, ParseError};
-use velocitas_fix::serializer;
-use velocitas_fix::session::{Session, SessionConfig, SessionRole, SessionState, SequenceResetPolicy};
-use velocitas_fix::journal::{Journal, SyncPolicy, session_hash};
-use velocitas_fix::pool::BufferPool;
-use velocitas_fix::tags;
-use std::time::Duration;
 
 // ============================================================================
 // Parse → Serialize roundtrip tests
@@ -20,7 +21,12 @@ use std::time::Duration;
 fn test_roundtrip_heartbeat() {
     let mut buf = [0u8; 1024];
     let len = serializer::build_heartbeat(
-        &mut buf, b"FIX.4.4", b"BANK", b"NYSE", 1, b"20260321-10:00:00",
+        &mut buf,
+        b"FIX.4.4",
+        b"BANK",
+        b"NYSE",
+        1,
+        b"20260321-10:00:00",
     );
 
     let parser = FixParser::new();
@@ -39,8 +45,13 @@ fn test_roundtrip_heartbeat() {
 fn test_roundtrip_logon() {
     let mut buf = [0u8; 1024];
     let len = serializer::build_logon(
-        &mut buf, b"FIX.4.4", b"CLIENT", b"SERVER", 1,
-        b"20260321-10:00:00", 30,
+        &mut buf,
+        b"FIX.4.4",
+        b"CLIENT",
+        b"SERVER",
+        1,
+        b"20260321-10:00:00",
+        30,
     );
 
     let parser = FixParser::new();
@@ -55,9 +66,18 @@ fn test_roundtrip_logon() {
 fn test_roundtrip_new_order_single() {
     let mut buf = [0u8; 1024];
     let len = serializer::build_new_order_single(
-        &mut buf, b"FIX.4.4", b"OMS", b"NYSE", 42,
-        b"20260321-10:00:00.123", b"CLO-12345", b"MSFT",
-        b'2', 5000, b'2', b"425.75",
+        &mut buf,
+        b"FIX.4.4",
+        b"OMS",
+        b"NYSE",
+        42,
+        b"20260321-10:00:00.123",
+        b"CLO-12345",
+        b"MSFT",
+        b'2',
+        5000,
+        b'2',
+        b"425.75",
     );
 
     let parser = FixParser::new();
@@ -75,10 +95,25 @@ fn test_roundtrip_new_order_single() {
 fn test_roundtrip_execution_report() {
     let mut buf = [0u8; 2048];
     let len = serializer::build_execution_report(
-        &mut buf, b"FIX.4.4", b"NYSE", b"OMS", 100,
-        b"20260321-10:00:00.456", b"ORD-001", b"EXE-001",
-        b"CLO-12345", b"MSFT", b'2', 5000, 2500,
-        b"425.75", 2500, 2500, b"425.75", b'F', b'1',
+        &mut buf,
+        b"FIX.4.4",
+        b"NYSE",
+        b"OMS",
+        100,
+        b"20260321-10:00:00.456",
+        b"ORD-001",
+        b"EXE-001",
+        b"CLO-12345",
+        b"MSFT",
+        b'2',
+        5000,
+        2500,
+        b"425.75",
+        2500,
+        2500,
+        b"425.75",
+        b'F',
+        b'1',
     );
 
     let parser = FixParser::new();
@@ -107,14 +142,22 @@ fn test_parse_rejects_truncated_message() {
 fn test_parse_rejects_invalid_begin_string_position() {
     let parser = FixParser::new();
     let msg = b"35=D\x018=FIX.4.4\x019=5\x0110=000\x01xxx";
-    assert_eq!(parser.parse(msg).unwrap_err(), ParseError::MissingBeginString);
+    assert_eq!(
+        parser.parse(msg).unwrap_err(),
+        ParseError::MissingBeginString
+    );
 }
 
 #[test]
 fn test_parse_large_sequence_numbers() {
     let mut buf = [0u8; 1024];
     let len = serializer::build_heartbeat(
-        &mut buf, b"FIX.4.4", b"S", b"T", u64::MAX / 2, b"20260321-10:00:00",
+        &mut buf,
+        b"FIX.4.4",
+        b"S",
+        b"T",
+        u64::MAX / 2,
+        b"20260321-10:00:00",
     );
 
     let parser = FixParser::new();
@@ -126,9 +169,8 @@ fn test_parse_large_sequence_numbers() {
 fn test_parse_all_fix_versions() {
     for version in &[b"FIX.4.0", b"FIX.4.1", b"FIX.4.2", b"FIX.4.3", b"FIX.4.4"] {
         let mut buf = [0u8; 1024];
-        let len = serializer::build_heartbeat(
-            &mut buf, *version, b"S", b"T", 1, b"20260321-10:00:00",
-        );
+        let len =
+            serializer::build_heartbeat(&mut buf, *version, b"S", b"T", 1, b"20260321-10:00:00");
 
         let parser = FixParser::new();
         let (view, _) = parser.parse(&buf[..len]).unwrap();
@@ -184,9 +226,9 @@ fn test_full_session_lifecycle() {
     session.on_gap_filled(105);
     assert_eq!(session.state(), SessionState::Active);
 
-    // Phase 5: Logout
+    // Phase 5: Logout — we sent Logout and are waiting for peer's Logout response
     session.on_logout_sent();
-    assert_eq!(session.state(), SessionState::LogoutSent);
+    assert_eq!(session.state(), SessionState::LogoutPending);
     session.on_disconnected();
     assert_eq!(session.state(), SessionState::Disconnected);
 }
@@ -249,9 +291,18 @@ fn test_journal_message_persistence_and_recovery() {
         for seq in 1..=1000u64 {
             let mut buf = [0u8; 512];
             let len = serializer::build_new_order_single(
-                &mut buf, b"FIX.4.4", b"BANK", b"EXCHANGE", seq,
-                b"20260321-10:00:00", format!("ORD-{:05}", seq).as_bytes(),
-                b"AAPL", b'1', 100, b'2', b"150.00",
+                &mut buf,
+                b"FIX.4.4",
+                b"BANK",
+                b"EXCHANGE",
+                seq,
+                b"20260321-10:00:00",
+                format!("ORD-{:05}", seq).as_bytes(),
+                b"AAPL",
+                b'1',
+                100,
+                b'2',
+                b"150.00",
             );
             journal.append(hash, seq, &buf[..len]).unwrap();
         }
@@ -292,9 +343,18 @@ fn test_pool_based_message_processing() {
         let buf = pool.get_mut(handle);
 
         let len = serializer::build_new_order_single(
-            buf, b"FIX.4.4", b"S", b"T", i,
-            b"20260321-10:00:00", format!("O-{}", i).as_bytes(),
-            b"AAPL", b'1', 100, b'2', b"150.00",
+            buf,
+            b"FIX.4.4",
+            b"S",
+            b"T",
+            i,
+            b"20260321-10:00:00",
+            format!("O-{}", i).as_bytes(),
+            b"AAPL",
+            b'1',
+            100,
+            b'2',
+            b"150.00",
         );
 
         let (view, _) = parser.parse(&pool.get(handle)[..len]).unwrap();
@@ -313,9 +373,18 @@ fn test_parse_million_messages() {
     let parser = FixParser::new_unchecked();
     let mut buf = [0u8; 512];
     let len = serializer::build_new_order_single(
-        &mut buf, b"FIX.4.4", b"S", b"T", 1,
-        b"20260321-10:00:00", b"ORD-1", b"AAPL",
-        b'1', 100, b'2', b"150.00",
+        &mut buf,
+        b"FIX.4.4",
+        b"S",
+        b"T",
+        1,
+        b"20260321-10:00:00",
+        b"ORD-1",
+        b"AAPL",
+        b'1',
+        100,
+        b'2',
+        b"150.00",
     );
     let msg = &buf[..len];
 
@@ -337,15 +406,27 @@ fn test_serialize_million_messages() {
     let start = std::time::Instant::now();
     for i in 0..1_000_000u64 {
         let _ = serializer::build_new_order_single(
-            &mut buf, b"FIX.4.4", b"S", b"T", i,
-            b"20260321-10:00:00", b"ORD-1", b"AAPL",
-            b'1', 100, b'2', b"150.00",
+            &mut buf,
+            b"FIX.4.4",
+            b"S",
+            b"T",
+            i,
+            b"20260321-10:00:00",
+            b"ORD-1",
+            b"AAPL",
+            b'1',
+            100,
+            b'2',
+            b"150.00",
         );
     }
     let elapsed = start.elapsed();
     let rate = 1_000_000.0 / elapsed.as_secs_f64();
 
-    eprintln!("Serialized 1M messages in {:?} ({:.0} msg/s)", elapsed, rate);
+    eprintln!(
+        "Serialized 1M messages in {:?} ({:.0} msg/s)",
+        elapsed, rate
+    );
 }
 
 // ============================================================================
@@ -380,9 +461,18 @@ fn test_side_parsing_in_context() {
         (b'5', Side::SellShort),
     ] {
         let len = serializer::build_new_order_single(
-            &mut buf, b"FIX.4.4", b"S", b"T", 1,
-            b"20260321-10:00:00", b"O1", b"AAPL",
-            *side_byte, 100, b'2', b"150.00",
+            &mut buf,
+            b"FIX.4.4",
+            b"S",
+            b"T",
+            1,
+            b"20260321-10:00:00",
+            b"O1",
+            b"AAPL",
+            *side_byte,
+            100,
+            b'2',
+            b"150.00",
         );
 
         let parser = FixParser::new();
@@ -403,28 +493,26 @@ fn test_checksum_integrity_across_message_types() {
 
     let mut buf = [0u8; 2048];
 
-    // Every message we serialize should have a valid checksum
-    let msgs: Vec<usize> = vec![
-        serializer::build_heartbeat(&mut buf, b"FIX.4.4", b"A", b"B", 1, b"20260321-10:00:00"),
-        serializer::build_logon(&mut buf, b"FIX.4.4", b"A", b"B", 1, b"20260321-10:00:00", 30),
-        serializer::build_new_order_single(
-            &mut buf, b"FIX.4.4", b"A", b"B", 1,
-            b"20260321-10:00:00", b"O1", b"X", b'1', 1, b'2', b"1.0",
-        ),
-    ];
-
-    // Parse each (they reuse buf, so we rebuild)
-    let test_cases = vec![
-        ("heartbeat", serializer::build_heartbeat as fn(&mut [u8], &[u8], &[u8], &[u8], u64, &[u8]) -> usize),
-    ];
-
-    // Just verify the last one serialized parses OK
+    // Verify one serializer-generated message still passes parser validation.
     let len = serializer::build_new_order_single(
-        &mut buf, b"FIX.4.4", b"A", b"B", 1,
-        b"20260321-10:00:00", b"O1", b"X", b'1', 1, b'2', b"1.0",
+        &mut buf,
+        b"FIX.4.4",
+        b"A",
+        b"B",
+        1,
+        b"20260321-10:00:00",
+        b"O1",
+        b"X",
+        b'1',
+        1,
+        b'2',
+        b"1.0",
     );
     let result = parser.parse(&buf[..len]);
-    assert!(result.is_ok(), "Checksum validation should pass for well-formed message");
+    assert!(
+        result.is_ok(),
+        "Checksum validation should pass for well-formed message"
+    );
 }
 
 // ============================================================================

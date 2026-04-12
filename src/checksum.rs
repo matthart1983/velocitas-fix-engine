@@ -27,7 +27,11 @@ pub fn compute(data: &[u8]) -> u8 {
         sum0 = sum0.wrapping_add(data[i + j] as u32);
     }
 
-    ((sum0.wrapping_add(sum1).wrapping_add(sum2).wrapping_add(sum3)) % 256) as u8
+    ((sum0
+        .wrapping_add(sum1)
+        .wrapping_add(sum2)
+        .wrapping_add(sum3))
+        % 256) as u8
 }
 
 /// Format checksum as 3-character zero-padded string into the provided buffer.

@@ -45,22 +45,23 @@ impl Transport for StdTcpTransport {
     }
 
     fn send(&mut self, data: &[u8]) -> io::Result<usize> {
-        let stream = self.stream.as_mut().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotConnected, "not connected")
-        })?;
+        let stream = self
+            .stream
+            .as_mut()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotConnected, "not connected"))?;
         stream.write_all(data)?;
         Ok(data.len())
     }
 
     fn recv(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        let stream = self.stream.as_mut().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotConnected, "not connected")
-        })?;
+        let stream = self
+            .stream
+            .as_mut()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotConnected, "not connected"))?;
         match stream.read(buffer) {
             Ok(n) => Ok(n),
             Err(e)
-                if e.kind() == io::ErrorKind::WouldBlock
-                    || e.kind() == io::ErrorKind::TimedOut =>
+                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut =>
             {
                 Ok(0)
             }

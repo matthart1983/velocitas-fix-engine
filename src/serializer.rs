@@ -290,6 +290,28 @@ pub fn build_logon(
     ser.finalize()
 }
 
+/// Convenience function to build a Logon message with ResetSeqNumFlag=Y.
+pub fn build_logon_with_reset(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    heartbeat_interval: i64,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"A")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_int(tags::ENCRYPT_METHOD, 0)
+        .add_int(tags::HEARTBT_INT, heartbeat_interval)
+        .add_str(tags::RESET_SEQ_NUM_FLAG, b"Y");
+    ser.finalize()
+}
+
 /// Convenience function to build a Logout message.
 pub fn build_logout(
     buf: &mut [u8],
@@ -305,6 +327,120 @@ pub fn build_logout(
         .add_str(tags::TARGET_COMP_ID, target)
         .add_u64(tags::MSG_SEQ_NUM, seq_num)
         .add_str(tags::SENDING_TIME, sending_time);
+    ser.finalize()
+}
+
+/// Convenience function to build a SequenceReset-GapFill message (35=4, 123=Y).
+pub fn build_sequence_reset_gap_fill(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    new_seq_no: u64,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"4")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_str(tags::GAP_FILL_FLAG, b"Y")
+        .add_u64(tags::NEW_SEQ_NO, new_seq_no)
+        .add_str(tags::POSS_DUP_FLAG, b"Y");
+    ser.finalize()
+}
+
+/// Convenience function to build a Heartbeat message with an optional TestReqID.
+pub fn build_heartbeat_with_test_req_id(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    test_req_id: Option<&[u8]>,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"0")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time);
+    if let Some(id) = test_req_id {
+        ser.add_str(tags::TEST_REQ_ID, id);
+    }
+    ser.finalize()
+}
+
+/// Convenience function to build a ResendRequest message.
+pub fn build_resend_request(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    begin_seq_no: u64,
+    end_seq_no: u64,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"2")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_u64(tags::BEGIN_SEQ_NO, begin_seq_no)
+        .add_u64(tags::END_SEQ_NO, end_seq_no);
+    ser.finalize()
+}
+
+/// Convenience function to build a Reject message (35=3).
+pub fn build_reject(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    ref_seq_num: u64,
+    reason: u32,
+    text: Option<&[u8]>,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"3")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time)
+        .add_u64(tags::REF_SEQ_NUM, ref_seq_num)
+        .add_u64(tags::SESSION_REJECT_REASON, reason as u64);
+    if let Some(text) = text {
+        ser.add_str(tags::TEXT, text);
+    }
+    ser.finalize()
+}
+
+/// Convenience function to build a Logout message with optional text.
+pub fn build_logout_with_text(
+    buf: &mut [u8],
+    begin_string: &[u8],
+    sender: &[u8],
+    target: &[u8],
+    seq_num: u64,
+    sending_time: &[u8],
+    text: Option<&[u8]>,
+) -> usize {
+    let mut ser = FixSerializer::new(buf);
+    ser.begin(begin_string, b"5")
+        .add_str(tags::SENDER_COMP_ID, sender)
+        .add_str(tags::TARGET_COMP_ID, target)
+        .add_u64(tags::MSG_SEQ_NUM, seq_num)
+        .add_str(tags::SENDING_TIME, sending_time);
+    if let Some(text) = text {
+        ser.add_str(tags::TEXT, text);
+    }
     ser.finalize()
 }
 

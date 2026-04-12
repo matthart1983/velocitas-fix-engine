@@ -2,7 +2,6 @@
 ///
 /// `MessageView` provides zero-copy access to a FIX message — field values
 /// are slices into the original wire buffer, with no heap allocations.
-
 use crate::tags;
 
 /// Maximum number of fields in a single FIX message.
@@ -223,25 +222,25 @@ fn parse_u64(bytes: &[u8]) -> Option<u64> {
 /// FIX MsgType enum for fast dispatch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MsgType {
-    Heartbeat,              // 0
-    TestRequest,            // 1
-    ResendRequest,          // 2
-    Reject,                 // 3
-    SequenceReset,          // 4
-    Logout,                 // 5
-    Logon,                  // A
-    NewOrderSingle,         // D
-    OrderCancelRequest,     // F
+    Heartbeat,                 // 0
+    TestRequest,               // 1
+    ResendRequest,             // 2
+    Reject,                    // 3
+    SequenceReset,             // 4
+    Logout,                    // 5
+    Logon,                     // A
+    NewOrderSingle,            // D
+    OrderCancelRequest,        // F
     OrderCancelReplaceRequest, // G
-    OrderStatusRequest,     // H
-    ExecutionReport,        // 8
-    OrderCancelReject,      // 9
-    MarketDataRequest,      // V
-    MarketDataSnapshot,     // W
-    MarketDataIncremental,  // X
-    QuoteRequest,           // R
-    Quote,                  // S
-    TradeCaptureReport,     // AE
+    OrderStatusRequest,        // H
+    ExecutionReport,           // 8
+    OrderCancelReject,         // 9
+    MarketDataRequest,         // V
+    MarketDataSnapshot,        // W
+    MarketDataIncremental,     // X
+    QuoteRequest,              // R
+    Quote,                     // S
+    TradeCaptureReport,        // AE
     Unknown,
 }
 

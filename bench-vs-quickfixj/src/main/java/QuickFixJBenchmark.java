@@ -9,8 +9,8 @@ import quickfix.fix44.ExecutionReport;
  */
 public class QuickFixJBenchmark {
 
-    static final int WARMUP_ITERATIONS = 100_000;
-    static final int BENCH_ITERATIONS  = 1_000_000;
+    static final int WARMUP_ITERATIONS = 10_000;
+    static final int BENCH_ITERATIONS  = 100_000;
 
     // A realistic NewOrderSingle as raw FIX
     static final String NOS_RAW =

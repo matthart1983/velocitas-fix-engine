@@ -2,7 +2,6 @@
 ///
 /// Manages session lifecycle: logon, heartbeat, sequencing, gap detection,
 /// logout, and reconnection. All state transitions are deterministic.
-
 use std::time::{Duration, Instant};
 
 /// Session state machine states.
@@ -12,7 +11,11 @@ pub enum SessionState {
     Connecting,
     LogonSent,
     Active,
+    /// Waiting for gap fill / resend response from peer.
     Resending,
+    /// Logout sent, waiting for peer Logout response (or timeout).
+    LogoutPending,
+    /// Legacy alias — marks state after logout exchange is complete.
     LogoutSent,
 }
 
@@ -66,11 +69,23 @@ impl Default for SessionConfig {
     }
 }
 
-/// Actions that the session state machine requests the transport layer to perform.
+/// Actions that the session state machine requests the engine to perform.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionAction {
-    /// Send a FIX message.
-    Send(Vec<u8>),
+    /// Send a Heartbeat, optionally echoing a TestReqID.
+    SendHeartbeat { test_req_id: Option<Vec<u8>> },
+    /// Send a TestRequest with the given ID.
+    SendTestRequest { test_req_id: Vec<u8> },
+    /// Send a ResendRequest for the given sequence range.
+    SendResendRequest { begin_seq: u64, end_seq: u64 },
+    /// Send a Reject for the given reference sequence number.
+    SendReject {
+        ref_seq_num: u64,
+        reason: u32,
+        text: Option<String>,
+    },
+    /// Send a Logout with optional reason text.
+    SendLogout { text: Option<String> },
     /// Disconnect the transport.
     Disconnect,
     /// No action needed.
@@ -90,14 +105,19 @@ pub struct Session {
     last_sent_time: Instant,
     last_received_time: Instant,
     test_request_pending: bool,
-    test_request_sent_time: Option<Instant>,
+    test_request_id: Option<Vec<u8>>,
 
     // Reconnection
     reconnect_attempts: u32,
+    test_req_counter: u64,
 
     // Rate limiting
     msg_count_window: u32,
     window_start: Instant,
+
+    // Logout timer
+    logout_sent_time: Option<Instant>,
+    logout_timeout: Duration,
 }
 
 impl Session {
@@ -112,10 +132,13 @@ impl Session {
             last_sent_time: now,
             last_received_time: now,
             test_request_pending: false,
-            test_request_sent_time: None,
+            test_request_id: None,
             reconnect_attempts: 0,
+            test_req_counter: 0,
             msg_count_window: 0,
             window_start: now,
+            logout_sent_time: None,
+            logout_timeout: Duration::from_secs(10),
         }
     }
 
@@ -176,6 +199,73 @@ impl Session {
         self.test_request_pending = false;
     }
 
+    /// Validate an inbound Logon message against session configuration.
+    ///
+    /// Checks BeginString, CompID directionality, and ResetSeqNumFlag.
+    /// Returns `Ok(reset_sequences)` where `reset_sequences` is true if
+    /// the peer requested sequence reset (tag 141=Y).
+    /// Returns `Err(reason)` if validation fails — caller should send
+    /// Logout with the reason text and disconnect.
+    pub fn validate_logon(
+        &self,
+        begin_string: Option<&str>,
+        sender_comp_id: Option<&str>,
+        target_comp_id: Option<&str>,
+        reset_seq_num_flag: Option<&[u8]>,
+    ) -> Result<bool, String> {
+        // Validate BeginString matches config
+        if let Some(bs) = begin_string {
+            if bs != self.config.fix_version {
+                return Err(format!(
+                    "BeginString mismatch: expected {}, received {}",
+                    self.config.fix_version, bs
+                ));
+            }
+        } else {
+            return Err("Missing BeginString".to_string());
+        }
+
+        // Validate CompIDs — inbound Logon's SenderCompID should match
+        // our config's TargetCompID (and vice versa)
+        if self.config.validate_comp_ids {
+            if let Some(sender) = sender_comp_id {
+                if sender != self.config.target_comp_id {
+                    return Err(format!(
+                        "SenderCompID mismatch: expected {}, received {}",
+                        self.config.target_comp_id, sender
+                    ));
+                }
+            } else {
+                return Err("Missing SenderCompID".to_string());
+            }
+
+            if let Some(target) = target_comp_id {
+                if target != self.config.sender_comp_id {
+                    return Err(format!(
+                        "TargetCompID mismatch: expected {}, received {}",
+                        self.config.sender_comp_id, target
+                    ));
+                }
+            } else {
+                return Err("Missing TargetCompID".to_string());
+            }
+        }
+
+        // Check ResetSeqNumFlag (tag 141)
+        let reset = reset_seq_num_flag
+            .map(|v| v == b"Y")
+            .unwrap_or(false);
+
+        Ok(reset)
+    }
+
+    /// Handle logon with sequence reset — resets both sequence numbers and
+    /// transitions to Active.
+    pub fn on_logon_with_reset(&mut self) {
+        self.reset_sequences();
+        self.on_logon();
+    }
+
     /// Handle inbound message sequence validation.
     /// Returns `Ok(())` if sequence is correct, or `Err` with the gap range.
     pub fn validate_inbound_seq(&mut self, received_seq: u64) -> Result<(), (u64, u64)> {
@@ -201,43 +291,73 @@ impl Session {
         self.state = SessionState::Active;
     }
 
-    /// Handle logout request.
+    /// Handle locally-initiated logout — transitions to LogoutPending and
+    /// starts the logout response timer.
     pub fn on_logout_sent(&mut self) {
+        self.state = SessionState::LogoutPending;
+        self.logout_sent_time = Some(Instant::now());
+    }
+
+    /// Check if we're waiting for a logout response and have timed out.
+    pub fn check_logout_timeout(&self, now: Instant) -> bool {
+        if self.state != SessionState::LogoutPending {
+            return false;
+        }
+        if let Some(sent_time) = self.logout_sent_time {
+            return now.duration_since(sent_time) >= self.logout_timeout;
+        }
+        false
+    }
+
+    /// Mark logout exchange as complete.
+    pub fn on_logout_complete(&mut self) {
         self.state = SessionState::LogoutSent;
+        self.logout_sent_time = None;
     }
 
     /// Handle disconnect.
     pub fn on_disconnected(&mut self) {
         self.state = SessionState::Disconnected;
         self.test_request_pending = false;
+        self.logout_sent_time = None;
     }
 
-    /// Check if heartbeat should be sent (called periodically by the timer).
+    /// Returns true if the session is in gap-fill / resend recovery.
+    #[inline]
+    pub fn is_resending(&self) -> bool {
+        self.state == SessionState::Resending
+    }
+
+    /// Check if heartbeat or test request should be sent (called periodically).
     pub fn check_heartbeat(&mut self, now: Instant) -> SessionAction {
         if self.state != SessionState::Active {
             return SessionAction::None;
         }
 
-        let since_sent = now.duration_since(self.last_sent_time);
         let since_received = now.duration_since(self.last_received_time);
 
-        // Send heartbeat if we haven't sent anything in heartbeat_interval
-        if since_sent >= self.config.heartbeat_interval {
-            self.last_sent_time = now;
-            return SessionAction::Send(Vec::new()); // Caller fills in actual heartbeat
-        }
-
-        // Send TestRequest if we haven't received anything in heartbeat_interval + grace
+        // Check receive timeout first — if we haven't received anything in
+        // heartbeat_interval + reasonable transmission time, send TestRequest
+        // or disconnect if one is already pending.
         let timeout = self.config.heartbeat_interval + Duration::from_secs(5);
         if since_received >= timeout {
             if self.test_request_pending {
                 // Already sent a TestRequest and got no response — disconnect
                 return SessionAction::Disconnect;
             } else {
+                self.test_req_counter += 1;
+                let id = format!("TR-{}", self.test_req_counter).into_bytes();
                 self.test_request_pending = true;
-                self.test_request_sent_time = Some(now);
-                return SessionAction::Send(Vec::new()); // TestRequest
+                self.test_request_id = Some(id.clone());
+                return SessionAction::SendTestRequest { test_req_id: id };
             }
+        }
+
+        // Send heartbeat if we haven't sent anything in heartbeat_interval
+        let since_sent = now.duration_since(self.last_sent_time);
+        if since_sent >= self.config.heartbeat_interval {
+            self.last_sent_time = now;
+            return SessionAction::SendHeartbeat { test_req_id: None };
         }
 
         SessionAction::None
@@ -250,10 +370,44 @@ impl Session {
     }
 
     /// Record that a message was received (for heartbeat timing).
+    ///
+    /// Note: this does NOT clear `test_request_pending`. The pending test
+    /// request is only cleared by `on_test_request_response()` when a
+    /// Heartbeat echoing the correct TestReqID is received.
     #[inline]
     pub fn on_message_received(&mut self) {
         self.last_received_time = Instant::now();
-        self.test_request_pending = false;
+    }
+
+    /// Handle an inbound Heartbeat that may be a TestRequest response.
+    /// If `test_req_id` matches the pending TestReqID, clears the pending flag.
+    /// A Heartbeat with no TestReqID also clears it (lenient, per common impls).
+    pub fn on_heartbeat_received(&mut self, test_req_id: Option<&[u8]>) {
+        if !self.test_request_pending {
+            return;
+        }
+        match (&self.test_request_id, test_req_id) {
+            (Some(expected), Some(received)) if expected.as_slice() == received => {
+                self.test_request_pending = false;
+                self.test_request_id = None;
+            }
+            (_, None) => {
+                // Lenient: clear on any heartbeat even without TestReqID
+                self.test_request_pending = false;
+                self.test_request_id = None;
+            }
+            _ => {
+                // Mismatched TestReqID — don't clear
+            }
+        }
+    }
+
+    /// Handle an inbound TestRequest. Returns the action to echo back
+    /// a Heartbeat with the received TestReqID.
+    pub fn on_test_request_received(&mut self, test_req_id: &[u8]) -> SessionAction {
+        SessionAction::SendHeartbeat {
+            test_req_id: Some(test_req_id.to_vec()),
+        }
     }
 
     /// Check if the session should attempt reconnection.
@@ -426,5 +580,216 @@ mod tests {
         session.on_connected();
         assert_eq!(session.state(), SessionState::Connecting);
         assert!(!session.should_reconnect());
+    }
+
+    // -- Logon validation tests ------------------------------------------------
+
+    #[test]
+    fn test_validate_logon_success() {
+        let session = Session::new(test_config());
+        // Inbound Logon from TARGET (our target) → us (SENDER)
+        let result = session.validate_logon(
+            Some("FIX.4.4"),
+            Some("TARGET"),   // peer's SenderCompID == our TargetCompID
+            Some("SENDER"),   // peer's TargetCompID == our SenderCompID
+            None,
+        );
+        assert_eq!(result, Ok(false));
+    }
+
+    #[test]
+    fn test_validate_logon_bad_begin_string() {
+        let session = Session::new(test_config());
+        let result = session.validate_logon(
+            Some("FIX.4.2"),
+            Some("TARGET"),
+            Some("SENDER"),
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("BeginString mismatch"));
+    }
+
+    #[test]
+    fn test_validate_logon_bad_sender_comp_id() {
+        let session = Session::new(test_config());
+        let result = session.validate_logon(
+            Some("FIX.4.4"),
+            Some("WRONG"),    // not our expected TargetCompID
+            Some("SENDER"),
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("SenderCompID mismatch"));
+    }
+
+    #[test]
+    fn test_validate_logon_bad_target_comp_id() {
+        let session = Session::new(test_config());
+        let result = session.validate_logon(
+            Some("FIX.4.4"),
+            Some("TARGET"),
+            Some("WRONG"),    // not our SenderCompID
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("TargetCompID mismatch"));
+    }
+
+    #[test]
+    fn test_validate_logon_missing_begin_string() {
+        let session = Session::new(test_config());
+        let result = session.validate_logon(None, Some("TARGET"), Some("SENDER"), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Missing BeginString"));
+    }
+
+    #[test]
+    fn test_validate_logon_skip_comp_id_validation() {
+        let mut config = test_config();
+        config.validate_comp_ids = false;
+        let session = Session::new(config);
+        let result = session.validate_logon(
+            Some("FIX.4.4"),
+            Some("ANYTHING"),
+            Some("ANYTHING"),
+            None,
+        );
+        assert_eq!(result, Ok(false));
+    }
+
+    #[test]
+    fn test_validate_logon_reset_seq_num_flag() {
+        let session = Session::new(test_config());
+        let result = session.validate_logon(
+            Some("FIX.4.4"),
+            Some("TARGET"),
+            Some("SENDER"),
+            Some(b"Y"),
+        );
+        assert_eq!(result, Ok(true));
+    }
+
+    #[test]
+    fn test_validate_logon_reset_seq_num_flag_no() {
+        let session = Session::new(test_config());
+        let result = session.validate_logon(
+            Some("FIX.4.4"),
+            Some("TARGET"),
+            Some("SENDER"),
+            Some(b"N"),
+        );
+        assert_eq!(result, Ok(false));
+    }
+
+    #[test]
+    fn test_logon_with_reset() {
+        let mut session = Session::new(test_config());
+        session.next_outbound_seq_num(); // seq now 2
+        session.next_outbound_seq_num(); // seq now 3
+        assert_eq!(session.current_outbound_seq_num(), 3);
+
+        session.on_logon_with_reset();
+        assert_eq!(session.state(), SessionState::Active);
+        assert_eq!(session.current_outbound_seq_num(), 1);
+        assert_eq!(session.expected_inbound_seq_num(), 1);
+    }
+
+    // -- TestRequest / Heartbeat echo tests ------------------------------------
+
+    #[test]
+    fn test_heartbeat_received_clears_matching_test_req() {
+        let mut session = Session::new(test_config());
+        session.on_connected();
+        session.on_logon();
+
+        // Simulate sending a TestRequest
+        session.test_request_pending = true;
+        session.test_request_id = Some(b"TR-1".to_vec());
+
+        // Matching heartbeat clears it
+        session.on_heartbeat_received(Some(b"TR-1"));
+        assert!(!session.test_request_pending);
+    }
+
+    #[test]
+    fn test_heartbeat_received_ignores_mismatched_test_req() {
+        let mut session = Session::new(test_config());
+        session.on_connected();
+        session.on_logon();
+
+        session.test_request_pending = true;
+        session.test_request_id = Some(b"TR-1".to_vec());
+
+        // Wrong ID — doesn't clear
+        session.on_heartbeat_received(Some(b"TR-WRONG"));
+        assert!(session.test_request_pending);
+    }
+
+    #[test]
+    fn test_heartbeat_no_id_clears_pending() {
+        let mut session = Session::new(test_config());
+        session.on_connected();
+        session.on_logon();
+
+        session.test_request_pending = true;
+        session.test_request_id = Some(b"TR-1".to_vec());
+
+        // Lenient: no TestReqID still clears
+        session.on_heartbeat_received(None);
+        assert!(!session.test_request_pending);
+    }
+
+    #[test]
+    fn test_on_test_request_received_echoes_id() {
+        let mut session = Session::new(test_config());
+        session.on_connected();
+        session.on_logon();
+
+        let action = session.on_test_request_received(b"REQ-42");
+        assert_eq!(
+            action,
+            SessionAction::SendHeartbeat {
+                test_req_id: Some(b"REQ-42".to_vec())
+            }
+        );
+    }
+
+    #[test]
+    fn test_check_heartbeat_sends_test_request_on_timeout() {
+        let mut config = test_config();
+        config.heartbeat_interval = Duration::from_millis(10);
+        let mut session = Session::new(config);
+        session.on_connected();
+        session.on_logon();
+
+        // Force receive time beyond heartbeat_interval + 5s grace
+        session.last_received_time = Instant::now() - Duration::from_secs(10);
+        session.last_sent_time = Instant::now();
+
+        let action = session.check_heartbeat(Instant::now());
+        match action {
+            SessionAction::SendTestRequest { test_req_id } => {
+                assert!(!test_req_id.is_empty());
+                assert!(session.test_request_pending);
+            }
+            other => panic!("Expected SendTestRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_check_heartbeat_disconnects_after_unanswered_test_req() {
+        let mut config = test_config();
+        config.heartbeat_interval = Duration::from_millis(10);
+        let mut session = Session::new(config);
+        session.on_connected();
+        session.on_logon();
+
+        session.last_received_time = Instant::now() - Duration::from_secs(10);
+        session.last_sent_time = Instant::now();
+        session.test_request_pending = true;
+
+        let action = session.check_heartbeat(Instant::now());
+        assert_eq!(action, SessionAction::Disconnect);
     }
 }
